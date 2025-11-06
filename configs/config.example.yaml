@@ -1,0 +1,95 @@
+# bili-download 配置文件示例
+
+# 基本设置
+server:
+  bind_address: "0.0.0.0:8080"
+  auth_token: "your-secret-token"
+
+# 数据库配置
+database:
+  host: "localhost"
+  port: 5432
+  user: "bili_sync"
+  password: "your_password"
+  dbname: "bili_sync"
+  sslmode: "disable"              # disable/require/verify-ca/verify-full
+  max_open_conns: 25              # 最大打开连接数
+  max_idle_conns: 5               # 最大空闲连接数
+  conn_max_lifetime: 300          # 连接最大生命周期（秒）
+
+# 同步设置
+sync:
+  interval: 3600                  # 同步间隔（秒）
+  scan_only: false                # 仅扫描不下载
+
+# 路径设置
+paths:
+  download_base: "/downloads/bilibili"
+  upper_path: "/metadata/people"
+
+# 模板设置
+template:
+  video_name: "{{title}}"
+  page_name: "{{title}}"
+  time_format: "%Y-%m-%d"         # strftime 格式
+
+# B站认证
+bilibili:
+  credential:
+    sessdata: ""
+    bili_jct: ""
+    buvid3: ""
+    dedeuserid: ""
+    ac_time_value: ""
+
+# 视频质量
+quality:
+  max_resolution: "1080P+"        # 1080P+/1080P/720P/480P/360P
+  codec_priority:                 # 编码优先级
+    - "AVC"
+    - "HEVC"
+    - "AV1"
+  audio_quality: "high"           # high/medium/low
+  cdn_sort: false                 # 启用 CDN 排序
+
+# 下载选项
+download:
+  skip_poster: false
+  skip_video_nfo: false
+  skip_upper: false
+  skip_danmaku: false
+  skip_subtitle: false
+
+# 弹幕配置
+danmaku:
+  duration: 12.0                  # 持续时间（秒）
+  font_name: "Microsoft YaHei"
+  font_size: 38
+  width_ratio: 1.5
+  horizontal_gap: 30
+  lane_size: 0
+  float_percentage: 0.5
+  bottom_percentage: 0.25
+  opacity: 180                    # 0-255
+  outline_width: 1.5
+  time_offset: 0.0
+  bold: false
+
+# 高级设置
+advanced:
+  concurrent_limit:
+    video: 3                      # 视频并发数
+    page: 2                       # 分页并发数
+  rate_limit:
+    duration_ms: 250              # 时间窗口（毫秒）
+    limit: 4                      # 窗口内最大请求数
+  nfo_time_type: "favtime"        # favtime/pubtime
+  ytdlp_extra_args: []            # yt-dlp 额外参数
+
+# 日志
+logging:
+  level: "info"                   # debug/info/warn/error
+  file: "/var/log/bili-sync/app.log"
+  max_size_mb: 100
+  max_backups: 3
+  max_age_days: 30

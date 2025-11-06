@@ -1,0 +1,44 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: bili-download-db
+    environment:
+      POSTGRES_USER: bili_sync
+      POSTGRES_PASSWORD: bili_sync_password
+      POSTGRES_DB: bili_sync
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bili_sync"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # bili-download:
+  #   build: .
+  #   container_name: bili-download
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  #   environment:
+  #     DB_HOST: postgres
+  #     DB_PORT: 5432
+  #     DB_USER: bili_sync
+  #     DB_PASSWORD: bili_sync_password
+  #     DB_NAME: bili_sync
+  #     DB_SSLMODE: disable
+  #   volumes:
+  #     - ./configs:/app/configs
+  #     - ./downloads:/downloads
+  #     - ./metadata:/metadata
+  #   ports:
+  #     - "8080:8080"
+  #   restart: unless-stopped
+
+volumes:
+  postgres_data:

@@ -1,0 +1,62 @@
+# Build artifacts
+build/
+dist/
+
+# Config files
+configs/config.yaml
+configs/*.yaml
+!configs/config.example.yaml
+
+# Logs
+*.log
+logs/
+
+# Download directories
+downloads/
+metadata/
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Environment variables
+.env
+.env.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Git
+.git/
+.gitignore
+
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
+
+# Frontend
+web/node_modules/
+web/dist/
+
+# Dependencies
+vendor/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Docker
+.docker-data/
+
+# Test files
+coverage.out
+coverage.html
+*.test
