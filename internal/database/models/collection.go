@@ -16,6 +16,14 @@ type Collection struct {
 	Rule        string     `gorm:"type:jsonb" json:"rule,omitempty"` // 过滤规则 JSON
 	CreatedAt   time.Time  `json:"created_at"`
 
+	// 调度相关字段
+	Priority            int        `gorm:"default:0" json:"priority"`              // 优先级 (0-10)
+	HealthStatus        string     `gorm:"default:'healthy'" json:"health_status"` // healthy/degraded/unhealthy
+	ConsecutiveFailures int        `gorm:"default:0" json:"consecutive_failures"`  // 连续失败次数
+	LastScanAt          *time.Time `json:"last_scan_at,omitempty"`                 // 最后扫描时间
+	LastScanError       string     `json:"last_scan_error,omitempty"`              // 最后扫描错误
+	LastSuccessAt       *time.Time `json:"last_success_at,omitempty"`              // 最后成功时间
+
 	// 关联
 	Videos []Video `gorm:"foreignKey:CollectionID;constraint:OnDelete:CASCADE" json:"videos,omitempty"`
 }

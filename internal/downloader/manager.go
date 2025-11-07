@@ -3,6 +3,7 @@ package downloader
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -264,7 +265,14 @@ func (dm *DownloadManager) executeVideoTask(task *DownloadTask) {
 
 	// 下载所有分P
 	video := task.Video
+	utils.Info("开始下载视频: %s (BV%s), Pages数量: %d", video.Name, video.BVid, len(video.Pages))
+
+	// 为每个视频创建专属文件夹
+	videoDir := filepath.Join(task.OutputDir, utils.Filenamify(video.Name))
+	utils.Debug("视频下载目录: %s", videoDir)
+
 	for _, page := range video.Pages {
+		utils.Info("准备下载分P: %s - P%d (%s)", video.Name, page.PID, page.Name)
 		// 检查是否取消
 		if task.IsCancelled() {
 			task.SetStatus(TaskStatusCancelled)
@@ -284,8 +292,8 @@ func (dm *DownloadManager) executeVideoTask(task *DownloadTask) {
 			return
 		}
 
-		// 下载分P
-		err := dm.downloader.DownloadPage(task.Context, video, &page, task.OutputDir)
+		// 下载分P到视频专属文件夹
+		err := dm.downloader.DownloadPage(task.Context, video, &page, videoDir)
 		dm.concurrency.ReleasePage()
 
 		if err != nil {
@@ -353,8 +361,12 @@ func (dm *DownloadManager) executePageTask(task *DownloadTask) {
 		Timestamp: time.Now(),
 	})
 
-	// 下载分P
-	err := dm.downloader.DownloadPage(task.Context, task.Video, task.Page, task.OutputDir)
+	// 为每个视频创建专属文件夹
+	videoDir := filepath.Join(task.OutputDir, utils.Filenamify(task.Video.Name))
+	utils.Debug("分P下载目录: %s", videoDir)
+
+	// 下载分P到视频专属文件夹
+	err := dm.downloader.DownloadPage(task.Context, task.Video, task.Page, videoDir)
 	if err != nil {
 		utils.Error("下载分P失败: %v", err)
 		task.SetError(err)

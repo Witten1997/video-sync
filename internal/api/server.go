@@ -9,6 +9,7 @@ import (
 	"bili-download/internal/bilibili"
 	"bili-download/internal/config"
 	"bili-download/internal/downloader"
+	"bili-download/internal/scheduler"
 	"bili-download/internal/utils"
 
 	"github.com/gin-contrib/cors"
@@ -23,6 +24,7 @@ type Server struct {
 	db           *gorm.DB
 	biliClient   *bilibili.Client
 	downloadMgr  *downloader.DownloadManager
+	scheduler    *scheduler.Scheduler
 	router       *gin.Engine
 	httpServer   *http.Server
 	websocketHub *WebSocketHub
@@ -45,6 +47,9 @@ func NewServer(cfg *config.Config, configPath string, db *gorm.DB, biliClient *b
 		downloadMgr:  downloadMgr,
 		websocketHub: NewWebSocketHub(),
 	}
+
+	// 创建调度器
+	s.scheduler = scheduler.NewScheduler(cfg, db, downloadMgr)
 
 	// 创建路由
 	s.setupRouter()
@@ -149,6 +154,9 @@ func (s *Server) setupRouter() {
 
 		// WebSocket
 		api.GET("/ws", s.handleWebSocket)
+
+		// 调度器路由
+		s.registerSchedulerRoutes(api)
 	}
 
 	// 静态文件服务（下载文件）
@@ -173,6 +181,9 @@ func (s *Server) Start() error {
 	// 启动 WebSocket Hub
 	go s.websocketHub.Run()
 
+	// 注意：下载管理器应该在创建 Server 之前已经启动（在 main.go 中）
+	// 这里不再重复启动，避免 "管理器已在运行" 错误
+
 	// 添加日志钩子
 	logHook := NewWebSocketLogHook(s.websocketHub)
 	logger := utils.GetLogger()
@@ -184,6 +195,15 @@ func (s *Server) Start() error {
 			Type:      "download_event",
 			Data:      event,
 			Timestamp: time.Now(),
+		})
+	})
+
+	// 监听调度器事件，推送到 WebSocket
+	s.scheduler.OnEvent(func(event scheduler.Event) {
+		s.websocketHub.Broadcast(WebSocketMessage{
+			Type:      string(event.Type),
+			Data:      event.Data,
+			Timestamp: event.Timestamp,
 		})
 	})
 
@@ -209,6 +229,9 @@ func (s *Server) Start() error {
 // Shutdown 优雅关闭服务器
 func (s *Server) Shutdown(ctx context.Context) error {
 	utils.Info("正在关闭 HTTP 服务器...")
+
+	// 注意：下载管理器的停止由 main.go 中的 defer 处理
+	// 这里不再重复停止
 
 	// 关闭 WebSocket Hub
 	s.websocketHub.Stop()

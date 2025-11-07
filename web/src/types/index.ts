@@ -187,10 +187,79 @@ export interface Task {
 
 // 调度器状态
 export interface SchedulerStatus {
-  running: boolean
-  last_run_at: string
-  next_run_at: string
+  is_running: boolean
+  last_run_at: string | null
+  next_run_at: string | null
+  current_sync_id: string
+  interval: number
 }
+
+// 同步日志
+export interface SyncLog {
+  id: number
+  task_id: string
+  trigger_type: 'auto' | 'manual'
+  status: 'running' | 'completed' | 'failed' | 'cancelled'
+  start_at: string
+  end_at: string | null
+  duration_ms: number
+  sources_total: number
+  sources_scanned: number
+  sources_failed: number
+  videos_found: number
+  videos_new: number
+  videos_filtered: number
+  videos_queued: number
+  tasks_created: number
+  tasks_completed: number
+  tasks_failed: number
+  error_message: string
+  created_at: string
+  updated_at: string
+  source_scans?: VideoSourceScan[]
+}
+
+// 视频源扫描记录
+export interface VideoSourceScan {
+  id: number
+  sync_log_id: number
+  source_id: string
+  source_type: string
+  source_name: string
+  scanned_at: string
+  duration_ms: number
+  success: boolean
+  error_message: string
+  videos_found: number
+  videos_new: number
+  videos_filtered: number
+  videos_queued: number
+  created_at: string
+}
+
+// 同步统计
+export interface SyncStats {
+  period: string
+  total_syncs: number
+  successful_syncs: number
+  failed_syncs: number
+  success_rate: number
+  total_videos_found: number
+  total_videos_new: number
+  total_videos_queued: number
+  avg_duration_ms: number
+}
+
+// 任务统计
+export interface TasksSummary {
+  pending: number
+  queued: number
+  running: number
+  completed: number
+  failed: number
+  total: number
+}
+
 
 // 分页参数
 export interface PageParams {

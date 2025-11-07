@@ -38,6 +38,18 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '视频详情', hidden: true }
       },
       {
+        path: 'tasks',
+        name: 'TaskManager',
+        component: () => import('@/views/TaskManager.vue'),
+        meta: { title: '任务管理', icon: 'List' }
+      },
+      {
+        path: 'sync-logs',
+        name: 'SyncLogs',
+        component: () => import('@/views/SyncLogs.vue'),
+        meta: { title: '同步日志', icon: 'Clock' }
+      },
+      {
         path: 'config',
         name: 'Config',
         component: () => import('@/views/Config.vue'),

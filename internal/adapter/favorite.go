@@ -203,7 +203,7 @@ func (a *FavoriteAdapter) matchFilter(media bilibili.FavoriteMedia, opts *ScanOp
 
 // convertToVideoInfo 转换为统一的VideoInfo格式
 func (a *FavoriteAdapter) convertToVideoInfo(media bilibili.FavoriteMedia) VideoInfo {
-	return VideoInfo{
+	videoInfo := VideoInfo{
 		BVid:        media.BVid,
 		Aid:         media.ID,
 		Title:       media.Title,
@@ -227,4 +227,21 @@ func (a *FavoriteAdapter) convertToVideoInfo(media bilibili.FavoriteMedia) Video
 		SourceID:   a.config.MediaID,
 		AddTime:    time.Unix(media.FavTime, 0),
 	}
+
+	// 获取视频详情以获取Pages信息
+	if detail, err := a.client.GetVideoDetail(media.BVid); err == nil {
+		// 转换Pages信息
+		pages := make([]PageInfo, 0, len(detail.Pages))
+		for _, p := range detail.Pages {
+			pages = append(pages, PageInfo{
+				CID:      p.CID,
+				Page:     p.Page,
+				Part:     p.Part,
+				Duration: p.Duration,
+			})
+		}
+		videoInfo.Pages = pages
+	}
+
+	return videoInfo
 }
