@@ -152,6 +152,7 @@ func (d *Downloader) DownloadPage(ctx context.Context, video *models.Video, page
 // downloadPageVideo 下载分P视频
 func (d *Downloader) downloadPageVideo(ctx context.Context, video *models.Video, page *models.Page, outputDir string, pageProgress *PageProgress) error {
 	utils.Info("开始下载视频: %s [BV%s] P%d - %s", video.Name, video.BVid, page.PID, page.Name)
+	utils.Debug("输出目录: %s", outputDir)
 
 	// 更新子任务状态
 	pageProgress.UpdateSubTask("video", func(task *SubTaskProgress) {
@@ -164,6 +165,7 @@ func (d *Downloader) downloadPageVideo(ctx context.Context, video *models.Video,
 
 	// 构建输出文件名
 	outputTemplate := d.buildOutputTemplate(video, page)
+	utils.Debug("输出文件名模板: %s", outputTemplate)
 
 	// 构建格式选择器
 	format := d.buildFormatSelector()
@@ -223,16 +225,9 @@ func (d *Downloader) downloadPageVideo(ctx context.Context, video *models.Video,
 
 // buildOutputTemplate 构建输出文件名模板
 func (d *Downloader) buildOutputTemplate(video *models.Video, page *models.Page) string {
-	// 使用配置中的模板
-	template := d.config.Template.PageName
-	if video.SinglePage {
-		template = d.config.Template.VideoName
-	}
+	// 注意：outputDir已经是视频专属文件夹（例如：D:/Downloads/waasd/视频名/）
+	// 所以这里只需要返回文件名，不需要再包含视频名称
 
-	// 替换模板变量
-	template = utils.Filenamify(template)
-
-	// 简单实现，后续可以使用模板引擎
 	// 单页视频: {video_name}.%(ext)s
 	// 多页视频: {video_name}-{ptitle}.%(ext)s
 	if video.SinglePage {

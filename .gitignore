@@ -53,6 +53,7 @@ metadata/
 
 # Windows
 Thumbs.db
+nul
 
 # Frontend
 web/node_modules/

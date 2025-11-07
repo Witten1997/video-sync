@@ -3,6 +3,7 @@ package downloader
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"sync"
 	"time"
@@ -267,10 +268,6 @@ func (dm *DownloadManager) executeVideoTask(task *DownloadTask) {
 	video := task.Video
 	utils.Info("开始下载视频: %s (BV%s), Pages数量: %d", video.Name, video.BVid, len(video.Pages))
 
-	// 为每个视频创建专属文件夹
-	videoDir := filepath.Join(task.OutputDir, utils.Filenamify(video.Name))
-	utils.Debug("视频下载目录: %s", videoDir)
-
 	for _, page := range video.Pages {
 		utils.Info("准备下载分P: %s - P%d (%s)", video.Name, page.PID, page.Name)
 		// 检查是否取消
@@ -292,8 +289,8 @@ func (dm *DownloadManager) executeVideoTask(task *DownloadTask) {
 			return
 		}
 
-		// 下载分P到视频专属文件夹
-		err := dm.downloader.DownloadPage(task.Context, video, &page, videoDir)
+		// 下载分P到视频文件夹（task.OutputDir已经是视频专属文件夹）
+		err := dm.downloader.DownloadPage(task.Context, video, &page, task.OutputDir)
 		dm.concurrency.ReleasePage()
 
 		if err != nil {
@@ -361,12 +358,8 @@ func (dm *DownloadManager) executePageTask(task *DownloadTask) {
 		Timestamp: time.Now(),
 	})
 
-	// 为每个视频创建专属文件夹
-	videoDir := filepath.Join(task.OutputDir, utils.Filenamify(task.Video.Name))
-	utils.Debug("分P下载目录: %s", videoDir)
-
-	// 下载分P到视频专属文件夹
-	err := dm.downloader.DownloadPage(task.Context, task.Video, task.Page, videoDir)
+	// 下载分P到视频文件夹（task.OutputDir已经是视频专属文件夹）
+	err := dm.downloader.DownloadPage(task.Context, task.Video, task.Page, task.OutputDir)
 	if err != nil {
 		utils.Error("下载分P失败: %v", err)
 		task.SetError(err)
@@ -441,7 +434,47 @@ func (dm *DownloadManager) AddTask(task *DownloadTask) error {
 	return nil
 }
 
-// AddVideoTask 添加视频任务
+// PrepareAndAddVideoTask 准备并添加视频任务（统一的下载方法）
+// baseDir: 基础目录（URL下载使用DownloadBase，定时任务使用视频源Path）
+// autoCreateFolder: 是否自动为视频创建专属文件夹（通常为true）
+func (dm *DownloadManager) PrepareAndAddVideoTask(video *models.Video, baseDir string, priority TaskPriority, autoCreateFolder bool) (*DownloadTask, error) {
+	var outputDir string
+
+	if autoCreateFolder {
+		// 为视频创建专属文件夹
+		videoFolderName := utils.Filenamify(video.Name)
+		outputDir = filepath.Join(baseDir, videoFolderName)
+
+		// 创建目录
+		if err := os.MkdirAll(outputDir, 0755); err != nil {
+			return nil, fmt.Errorf("创建视频目录失败: %w", err)
+		}
+
+		// 更新数据库中的视频路径
+		if dm.db != nil {
+			video.Path = outputDir
+			if err := dm.db.Model(video).Update("path", outputDir).Error; err != nil {
+				utils.Warn("更新视频路径失败: %v", err)
+			}
+		}
+	} else {
+		outputDir = baseDir
+	}
+
+	// 创建下载任务
+	task := NewDownloadTask(TaskTypeVideo, video, nil, outputDir)
+	task.Priority = priority
+
+	if err := dm.AddTask(task); err != nil {
+		return nil, err
+	}
+
+	utils.Info("已为视频 [%s] 创建下载任务，输出目录: %s", video.Name, outputDir)
+	utils.Debug("视频Path字段已更新为: %s", video.Path)
+	return task, nil
+}
+
+// AddVideoTask 添加视频任务（保留向后兼容）
 func (dm *DownloadManager) AddVideoTask(video *models.Video, outputDir string, priority TaskPriority) (*DownloadTask, error) {
 	task := NewDownloadTask(TaskTypeVideo, video, nil, outputDir)
 	task.Priority = priority

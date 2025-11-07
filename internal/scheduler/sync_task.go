@@ -3,6 +3,7 @@ package scheduler
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -351,7 +352,9 @@ func (st *SyncTask) processVideos(videos []adapter.VideoInfo, source VideoSource
 				}
 
 				// 创建下载任务
-				if err := st.createDownloadTask(&videoWithPages); err != nil {
+				// 构建完整的基础目录：下载基础路径 + 视频源相对路径
+				baseDir := filepath.Join(st.config.Paths.DownloadBase, source.Path)
+				if err := st.createDownloadTask(&videoWithPages, baseDir); err != nil {
 					utils.Error("[%s] 创建下载任务失败: %s - %v", st.ID, video.Title, err)
 					continue
 				}
@@ -401,7 +404,7 @@ func (st *SyncTask) createVideoModel(video adapter.VideoInfo, source VideoSource
 		Valid:          true, // 默认为有效
 		ShouldDownload: true,
 		DownloadStatus: 0,
-		Path:           source.Path,
+		Path:           "", // 不在这里设置Path，由PrepareAndAddVideoTask统一设置
 	}
 
 	// 创建视频的所有分P
@@ -466,11 +469,10 @@ func extractIDFromSourceID(sourceID string) string {
 }
 
 // createDownloadTask 创建下载任务
-func (st *SyncTask) createDownloadTask(video *models.Video) error {
-	// 确定输出目录
-	outputDir := video.Path
-	if outputDir == "" {
-		outputDir = st.config.Paths.DownloadBase
+func (st *SyncTask) createDownloadTask(video *models.Video, baseDir string) error {
+	// 如果baseDir为空，使用默认下载目录
+	if baseDir == "" {
+		baseDir = st.config.Paths.DownloadBase
 	}
 
 	// 根据视频源优先级确定任务优先级
@@ -484,8 +486,8 @@ func (st *SyncTask) createDownloadTask(video *models.Video) error {
 		priority = downloader.PriorityLow
 	}
 
-	// 使用 DownloadManager 添加任务
-	task, err := st.downloadManager.AddVideoTask(video, outputDir, priority)
+	// 使用统一的下载方法（自动创建视频专属文件夹并更新数据库路径）
+	task, err := st.downloadManager.PrepareAndAddVideoTask(video, baseDir, priority, true)
 	if err != nil {
 		return fmt.Errorf("添加下载任务失败: %w", err)
 	}

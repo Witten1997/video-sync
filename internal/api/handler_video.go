@@ -197,22 +197,8 @@ func (s *Server) handleDownloadVideo(c *gin.Context) {
 		return
 	}
 
-	// 为视频创建独立文件夹
-	videoFolderName := utils.Filenamify(video.Name)
-	outputDir := filepath.Join(s.config.Paths.DownloadBase, videoFolderName)
-
-	// 创建目录
-	if err := os.MkdirAll(outputDir, 0755); err != nil {
-		respondInternalError(c, fmt.Errorf("创建视频目录失败: %w", err))
-		return
-	}
-
-	// 保存路径到数据库
-	video.Path = outputDir
-	s.db.Save(&video)
-
-	// 创建下载任务
-	task, err := s.downloadMgr.AddVideoTask(&video, outputDir, 0)
+	// 使用统一的下载方法
+	task, err := s.downloadMgr.PrepareAndAddVideoTask(&video, s.config.Paths.DownloadBase, 0, true)
 	if err != nil {
 		respondInternalError(c, err)
 		return
@@ -267,21 +253,8 @@ func (s *Server) handleDownloadByURL(c *gin.Context) {
 	var existingVideo models.Video
 	err = s.db.Where("bvid = ?", bvid).Preload("Pages").First(&existingVideo).Error
 	if err == nil {
-		// 视频已存在,为其创建独立文件夹并下载
-		videoFolderName := utils.Filenamify(existingVideo.Name)
-		outputDir := filepath.Join(s.config.Paths.DownloadBase, videoFolderName)
-
-		// 创建目录
-		if err := os.MkdirAll(outputDir, 0755); err != nil {
-			respondInternalError(c, fmt.Errorf("创建视频目录失败: %w", err))
-			return
-		}
-
-		// 保存路径到数据库
-		existingVideo.Path = outputDir
-		s.db.Save(&existingVideo)
-
-		task, err := s.downloadMgr.AddVideoTask(&existingVideo, outputDir, 0)
+		// 视频已存在，使用统一的下载方法
+		task, err := s.downloadMgr.PrepareAndAddVideoTask(&existingVideo, s.config.Paths.DownloadBase, 0, true)
 		if err != nil {
 			respondInternalError(c, err)
 			return
@@ -361,22 +334,8 @@ func (s *Server) handleDownloadByURL(c *gin.Context) {
 		return
 	}
 
-	// 8. 为视频创建独立文件夹
-	videoFolderName := utils.Filenamify(video.Name)
-	outputDir := filepath.Join(s.config.Paths.DownloadBase, videoFolderName)
-
-	// 创建目录
-	if err := os.MkdirAll(outputDir, 0755); err != nil {
-		respondInternalError(c, fmt.Errorf("创建视频目录失败: %w", err))
-		return
-	}
-
-	// 保存路径到数据库
-	video.Path = outputDir
-	s.db.Save(&video)
-
-	// 9. 创建下载任务
-	task, err := s.downloadMgr.AddVideoTask(&video, outputDir, 0)
+	// 8. 使用统一的下载方法创建任务
+	task, err := s.downloadMgr.PrepareAndAddVideoTask(&video, s.config.Paths.DownloadBase, 0, true)
 	if err != nil {
 		respondInternalError(c, err)
 		return
@@ -425,8 +384,16 @@ func (s *Server) findLocalVideoPoster(downloadDir string, video *models.Video) s
 	extensions := []string{".jpg", ".jpeg", ".png", ".webp", ".gif"}
 
 	videoName := utils.Filenamify(video.Name)
-	// 视频文件夹路径
-	videoFolder := filepath.Join(downloadDir, videoName)
+
+	// 使用video.Path作为视频文件夹路径（如果存在）
+	// video.Path已经是完整的视频文件夹路径（例如：D:/Downloads/waasd/视频名 或 D:/Downloads/waasd/收藏夹/rrrrrrry_yang/视频名）
+	var videoFolder string
+	if video.Path != "" {
+		videoFolder = video.Path
+	} else {
+		// 如果Path为空（旧数据），使用旧的逻辑
+		videoFolder = filepath.Join(downloadDir, videoName)
+	}
 
 	// 单P视频封面格式：{video_name}-poster.ext
 	for _, ext := range extensions {
@@ -435,8 +402,15 @@ func (s *Server) findLocalVideoPoster(downloadDir string, video *models.Video) s
 		// 检查文件是否存在（在视频文件夹内）
 		fullPath := filepath.Join(videoFolder, posterFile)
 		if fileExists(fullPath) {
-			// 返回相对于下载目录的 URL 路径（使用正斜杠）
-			return videoName + "/" + posterFile
+			// 计算相对于downloadDir的路径，用于URL返回
+			relPath, err := filepath.Rel(downloadDir, fullPath)
+			if err != nil {
+				// 如果无法计算相对路径，返回空
+				return ""
+			}
+			// 将Windows反斜杠转换为URL正斜杠
+			relPath = filepath.ToSlash(relPath)
+			return relPath
 		}
 	}
 
@@ -450,8 +424,16 @@ func (s *Server) findLocalPoster(downloadDir string, video *models.Video, page *
 
 	videoName := utils.Filenamify(video.Name)
 	pageName := utils.Filenamify(page.Name)
-	// 视频文件夹路径
-	videoFolder := filepath.Join(downloadDir, videoName)
+
+	// 使用video.Path作为视频文件夹路径（如果存在）
+	// video.Path已经是完整的视频文件夹路径
+	var videoFolder string
+	if video.Path != "" {
+		videoFolder = video.Path
+	} else {
+		// 如果Path为空（旧数据），使用旧的逻辑
+		videoFolder = filepath.Join(downloadDir, videoName)
+	}
 
 	var posterFile string
 
@@ -468,8 +450,15 @@ func (s *Server) findLocalPoster(downloadDir string, video *models.Video, page *
 		// 检查文件是否存在（在视频文件夹内）
 		fullPath := filepath.Join(videoFolder, posterFile)
 		if fileExists(fullPath) {
-			// 返回相对于下载目录的 URL 路径（使用正斜杠）
-			return videoName + "/" + posterFile
+			// 计算相对于downloadDir的路径，用于URL返回
+			relPath, err := filepath.Rel(downloadDir, fullPath)
+			if err != nil {
+				// 如果无法计算相对路径，返回空
+				return ""
+			}
+			// 将Windows反斜杠转换为URL正斜杠
+			relPath = filepath.ToSlash(relPath)
+			return relPath
 		}
 	}
 
