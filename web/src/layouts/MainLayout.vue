@@ -3,7 +3,7 @@
     <el-aside width="250px" class="sidebar">
       <div class="logo">
         <el-icon><VideoPlay /></el-icon>
-        <span>Bili Download</span>
+        <span>Video Sync</span>
       </div>
       <el-menu
         :default-active="activeMenu"
