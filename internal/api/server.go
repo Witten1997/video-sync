@@ -91,6 +91,13 @@ func (s *Server) setupRouter() {
 		api.GET("/system/info", s.handleSystemInfo)
 		api.GET("/system/stats", s.handleSystemStats)
 
+		// yt-dlp 版本管理
+		ytdlp := api.Group("/ytdlp")
+		{
+			ytdlp.GET("/version", s.handleGetYtdlpVersion)
+			ytdlp.POST("/update", s.handleUpdateYtdlp)
+		}
+
 		// 配置管理
 		config := api.Group("/config")
 		{
@@ -268,7 +275,7 @@ func (s *Server) loggerMiddleware() gin.HandlerFunc {
 			path = path + "?" + query
 		}
 
-		utils.Info("[API] %s %s %d %v %s",
+		utils.Debug("[API] %s %s %d %v %s",
 			method,
 			path,
 			status,

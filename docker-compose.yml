@@ -3,42 +3,74 @@ version: '3.8'
 services:
   postgres:
     image: postgres:15-alpine
-    container_name: bili-download-db
+    container_name: video-sync-db
     environment:
-      POSTGRES_USER: bili_sync
-      POSTGRES_PASSWORD: bili_sync_password
-      POSTGRES_DB: bili_sync
+      POSTGRES_USER: ${POSTGRES_USER:-bili_sync}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-bili_sync_password}
+      POSTGRES_DB: ${POSTGRES_DB:-bili_sync}
+      TZ: ${TZ:-Asia/Shanghai}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
+    networks:
+      - video-sync-network
+    # 不暴露端口到宿主机（安全考虑）
+    expose:
+      - "5432"
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U bili_sync"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-bili_sync}"]
       interval: 10s
       timeout: 5s
       retries: 5
 
-  # bili-download:
-  #   build: .
-  #   container_name: bili-download
-  #   depends_on:
-  #     postgres:
-  #       condition: service_healthy
-  #   environment:
-  #     DB_HOST: postgres
-  #     DB_PORT: 5432
-  #     DB_USER: bili_sync
-  #     DB_PASSWORD: bili_sync_password
-  #     DB_NAME: bili_sync
-  #     DB_SSLMODE: disable
-  #   volumes:
-  #     - ./configs:/app/configs
-  #     - ./downloads:/downloads
-  #     - ./metadata:/metadata
-  #   ports:
-  #     - "8080:8080"
-  #   restart: unless-stopped
+  video-sync:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: video-sync:latest
+    container_name: video-sync
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      # 数据库配置
+      DATABASE_HOST: postgres
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: ${POSTGRES_USER:-bili_sync}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-bili_sync_password}
+      DB_NAME: ${POSTGRES_DB:-bili_sync}
+      DB_SSLMODE: disable
+      # 时区
+      TZ: ${TZ:-Asia/Shanghai}
+      # 应用配置
+      APP_PORT: ${APP_PORT:-8080}
+    volumes:
+      # 配置文件目录
+      - ./configs:/app/configs
+      # 下载文件目录
+      - ${DOWNLOAD_PATH:-./downloads}:/downloads
+      # 元数据目录
+      - ${METADATA_PATH:-./metadata}:/metadata
+      # 日志目录
+      - ${LOG_PATH:-./logs}:/var/log/video-sync
+    networks:
+      - video-sync-network
+    ports:
+      - "${APP_PORT:-8080}:8080"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+networks:
+  video-sync-network:
+    driver: bridge
 
 volumes:
   postgres_data:
+    driver: local
+

@@ -248,6 +248,66 @@
             </el-form-item>
           </el-form>
         </el-tab-pane>
+
+        <el-tab-pane label="工具管理" name="tools">
+          <el-form label-width="180px">
+            <el-divider content-position="left">yt-dlp 版本管理</el-divider>
+
+            <el-form-item label="运行平台">
+              <el-tag type="info" size="large">
+                {{ ytdlpVersion.platform || 'unknown' }}
+              </el-tag>
+            </el-form-item>
+
+            <el-form-item label="当前版本">
+              <div class="version-info">
+                <el-tag v-if="ytdlpVersion.current_version" type="info" size="large">
+                  {{ ytdlpVersion.current_version }}
+                </el-tag>
+                <el-text v-else type="info">加载中...</el-text>
+              </div>
+            </el-form-item>
+
+            <el-form-item label="最新版本">
+              <div class="version-info">
+                <el-tag v-if="ytdlpVersion.latest_version" :type="ytdlpVersion.has_update ? 'success' : 'info'" size="large">
+                  {{ ytdlpVersion.latest_version }}
+                </el-tag>
+                <el-text v-else type="info">检查中...</el-text>
+                <el-tag v-if="ytdlpVersion.has_update" type="warning" size="small" style="margin-left: 10px">
+                  有新版本可用
+                </el-tag>
+              </div>
+            </el-form-item>
+
+            <el-form-item label="更新方式" v-if="ytdlpVersion.update_method">
+              <el-text type="info" size="small">
+                {{ ytdlpVersion.update_method }}
+              </el-text>
+            </el-form-item>
+
+            <el-form-item label="操作">
+              <el-space>
+                <el-button @click="checkYtdlpVersion" :loading="ytdlpLoading">
+                  <el-icon><Refresh /></el-icon>
+                  检查更新
+                </el-button>
+                <el-button
+                  type="primary"
+                  @click="updateYtdlp"
+                  :loading="ytdlpUpdating"
+                  :disabled="!ytdlpVersion.has_update && !ytdlpForceUpdate"
+                >
+                  <el-icon><Upload /></el-icon>
+                  {{ ytdlpVersion.has_update ? '立即更新' : '已是最新版本' }}
+                </el-button>
+              </el-space>
+              <div style="font-size: 12px; color: #909399; margin-top: 8px;">
+                更新过程可能需要1-2分钟，请耐心等待
+              </div>
+            </el-form-item>
+          </el-form>
+        </el-tab-pane>
       </el-tabs>
 
       <div class="actions">
@@ -260,8 +320,10 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { Refresh, Upload } from '@element-plus/icons-vue'
 import { getConfig, updateConfig, validateBilibiliCredential } from '@/api/config'
+import { getYtdlpVersionInfo, updateYtdlpVersion } from '@/api/ytdlp'
 
 defineOptions({
   name: 'Config'
@@ -286,6 +348,18 @@ const predefineColors = ref([
 
 const loading = ref(false)
 const activeTab = ref('basic')
+
+// yt-dlp 版本管理
+const ytdlpVersion = ref({
+  current_version: '',
+  latest_version: '',
+  has_update: false,
+  platform: '',
+  update_method: ''
+})
+const ytdlpLoading = ref(false)
+const ytdlpUpdating = ref(false)
+const ytdlpForceUpdate = ref(false)
 
 // 认证验证状态
 const credentialValidation = ref<{
@@ -427,6 +501,11 @@ const loadData = async () => {
     // 使用深度合并保持响应式
     if (data) {
       deepAssign(config.value, data)
+
+      // 如果B站认证信息存在，自动验证
+      if (data.bilibili?.credential?.sessdata) {
+        await validateCredential()
+      }
     }
   } catch (error) {
     console.error('加载配置失败:', error)
@@ -511,8 +590,61 @@ const validateCredential = async () => {
   }
 }
 
+// 检查 yt-dlp 版本
+const checkYtdlpVersion = async () => {
+  ytdlpLoading.value = true
+  try {
+    const data = await getYtdlpVersionInfo()
+    ytdlpVersion.value = data
+    if (data.has_update) {
+      ElMessage.success(`发现新版本 ${data.latest_version}`)
+    } else {
+      ElMessage.info('已是最新版本')
+    }
+  } catch (error: any) {
+    console.error('检查版本失败:', error)
+    ElMessage.error(error?.response?.data?.message || '检查版本失败')
+  } finally {
+    ytdlpLoading.value = false
+  }
+}
+
+// 更新 yt-dlp
+const updateYtdlp = async () => {
+  try {
+    await ElMessageBox.confirm(
+      '确定要更新 yt-dlp 吗？更新过程可能需要1-2分钟。',
+      '确认更新',
+      {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    )
+
+    ytdlpUpdating.value = true
+    const result = await updateYtdlpVersion()
+
+    ElMessage.success({
+      message: `更新成功！版本: ${result.old_version} → ${result.current_version}`,
+      duration: 5000
+    })
+
+    // 更新完成后重新检查版本
+    await checkYtdlpVersion()
+  } catch (error: any) {
+    if (error !== 'cancel') {
+      console.error('更新失败:', error)
+      ElMessage.error(error?.response?.data?.message || '更新失败')
+    }
+  } finally {
+    ytdlpUpdating.value = false
+  }
+}
+
 onMounted(() => {
   loadData()
+  checkYtdlpVersion()
 })
 </script>
 
@@ -542,5 +674,11 @@ onMounted(() => {
 .user-info p {
   margin: 5px 0;
   font-size: 14px;
+}
+
+.version-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 </style>
