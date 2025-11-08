@@ -2,6 +2,9 @@ package api
 
 import (
 	"fmt"
+	"io"
+	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -83,10 +86,12 @@ func (s *Server) handleListVideos(c *gin.Context) {
 		return
 	}
 
-	// 处理封面路径，优先使用本地封面
-	for i := range videos {
-		s.resolveVideoCoverPaths(&videos[i])
-	}
+	// 不使用本地封面地址了，统一使用远程封面地址
+
+	// 处理封面路径，优先使用本地封面地址
+	//for i := range videos {
+	//	s.resolveVideoCoverPaths(&videos[i])
+	//}
 
 	respondSuccess(c, gin.H{
 		"total":       total,
@@ -505,4 +510,74 @@ func (s *Server) deleteLocalFiles(video *models.Video) error {
 
 	utils.Info("已删除视频文件夹: %s", videoFolder)
 	return nil
+}
+
+// handleImageProxy 图片代理接口，用于解决B站防盗链问题
+func (s *Server) handleImageProxy(c *gin.Context) {
+	// 获取图片URL
+	imageURL := c.Query("url")
+	if imageURL == "" {
+		respondValidationError(c, "缺少图片URL参数")
+		return
+	}
+
+	// 验证URL格式
+	parsedURL, err := url.Parse(imageURL)
+	if err != nil {
+		respondValidationError(c, "无效的图片URL")
+		return
+	}
+
+	// 只允许代理B站的图片
+	if parsedURL.Host != "i0.hdslb.com" &&
+		parsedURL.Host != "i1.hdslb.com" &&
+		parsedURL.Host != "i2.hdslb.com" &&
+		parsedURL.Host != "archive.biliimg.com" {
+		respondValidationError(c, "只允许代理B站图片")
+		return
+	}
+
+	// 创建HTTP请求
+	req, err := http.NewRequest("GET", imageURL, nil)
+	if err != nil {
+		respondInternalError(c, err)
+		return
+	}
+
+	// 设置必要的请求头，伪装成B站的请求
+	req.Header.Set("Referer", "https://www.bilibili.com/")
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
+
+	// 发送请求
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		respondError(c, http.StatusBadGateway, "获取图片失败: "+err.Error())
+		return
+	}
+	defer resp.Body.Close()
+
+	// 检查响应状态
+	if resp.StatusCode != http.StatusOK {
+		respondError(c, resp.StatusCode, "获取图片失败")
+		return
+	}
+
+	// 设置响应头
+	contentType := resp.Header.Get("Content-Type")
+	if contentType != "" {
+		c.Header("Content-Type", contentType)
+	}
+
+	// 设置缓存控制
+	c.Header("Cache-Control", "public, max-age=86400") // 缓存24小时
+
+	// 复制图片内容到响应
+	c.Status(http.StatusOK)
+	_, err = io.Copy(c.Writer, resp.Body)
+	if err != nil {
+		utils.Error("复制图片内容失败: %v", err)
+	}
 }

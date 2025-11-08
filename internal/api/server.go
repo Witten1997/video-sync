@@ -136,6 +136,9 @@ func (s *Server) setupRouter() {
 			videos.GET("/:id/pages", s.handleGetVideoPages)
 		}
 
+		// 图片代理（用于解决B站防盗链问题）
+		api.GET("/image-proxy", s.handleImageProxy)
+
 		// 快捷订阅
 		subscription := api.Group("/subscription")
 		{

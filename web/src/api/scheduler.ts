@@ -4,6 +4,7 @@ import type {
   SyncLog,
   SyncStats,
   TasksSummary,
+  Task,
   PageParams,
   PageResponse
 } from '@/types'
@@ -51,4 +52,13 @@ export const getSyncStats = (period: '1d' | '7d' | '30d' | 'all' = '7d') => {
 // 获取任务统计
 export const getTasksSummary = () => {
   return http.get<TasksSummary>('/scheduler/tasks/summary')
+}
+
+// 获取任务列表
+export const getTasks = (params?: {
+  status?: string
+  sort_by?: string
+  sort_order?: 'asc' | 'desc'
+}) => {
+  return http.get<Task[]>('/scheduler/tasks', { params })
 }

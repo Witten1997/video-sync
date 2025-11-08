@@ -120,7 +120,12 @@
       <div class="filters">
         <el-form :inline="true" :model="filters" size="small">
           <el-form-item label="触发方式">
-            <el-select v-model="filters.trigger_type" @change="handleFilterChange">
+            <el-select
+              v-model="filters.trigger_type"
+              placeholder="请选择触发方式"
+              style="width: 140px"
+              @change="handleFilterChange"
+            >
               <el-option label="全部" value="all" />
               <el-option label="自动触发" value="auto" />
               <el-option label="手动触发" value="manual" />
@@ -128,7 +133,12 @@
           </el-form-item>
 
           <el-form-item label="状态">
-            <el-select v-model="filters.status" @change="handleFilterChange">
+            <el-select
+              v-model="filters.status"
+              placeholder="请选择状态"
+              style="width: 140px"
+              @change="handleFilterChange"
+            >
               <el-option label="全部" value="all" />
               <el-option label="运行中" value="running" />
               <el-option label="已完成" value="completed" />
@@ -138,7 +148,12 @@
           </el-form-item>
 
           <el-form-item label="排序">
-            <el-select v-model="filters.sort_by" @change="handleFilterChange">
+            <el-select
+              v-model="filters.sort_by"
+              placeholder="请选择排序方式"
+              style="width: 140px"
+              @change="handleFilterChange"
+            >
               <el-option label="开始时间" value="start_at" />
               <el-option label="耗时" value="duration_ms" />
               <el-option label="视频数" value="videos_found" />
@@ -146,7 +161,12 @@
           </el-form-item>
 
           <el-form-item>
-            <el-select v-model="filters.sort_order" @change="handleFilterChange">
+            <el-select
+              v-model="filters.sort_order"
+              placeholder="请选择排序顺序"
+              style="width: 100px"
+              @change="handleFilterChange"
+            >
               <el-option label="降序" value="desc" />
               <el-option label="升序" value="asc" />
             </el-select>

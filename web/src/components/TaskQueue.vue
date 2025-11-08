@@ -170,7 +170,7 @@ import {
 } from '@element-plus/icons-vue'
 import TaskCard from './TaskCard.vue'
 import type { Task, TasksSummary } from '@/types'
-import { getTasksSummary } from '@/api/scheduler'
+import { getTasksSummary, getTasks } from '@/api/scheduler'
 
 interface Props {
   autoRefresh?: boolean
@@ -269,10 +269,13 @@ const getEmptyDescription = () => {
 const fetchTasks = async () => {
   try {
     loading.value = true
-    // TODO: 实现获取任务列表的 API
-    // const res = await getTaskList()
-    // tasks.value = res.data.items
-    tasks.value = [] // 临时空数组
+    const params = {
+      status: activeTab.value === 'all' ? undefined : activeTab.value,
+      sort_by: sortBy.value,
+      sort_order: sortOrder.value
+    }
+    const res = await getTasks(params)
+    tasks.value = res || []
   } catch (error: any) {
     ElMessage.error(error.message || '获取任务列表失败')
   } finally {

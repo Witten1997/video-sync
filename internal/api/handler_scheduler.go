@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"bili-download/internal/database/models"
+	"bili-download/internal/downloader"
 	"bili-download/internal/utils"
 
 	"github.com/gin-gonic/gin"
@@ -257,6 +258,41 @@ func (s *Server) handleGetTasksSummary(c *gin.Context) {
 	})
 }
 
+// handleListTasks 获取任务列表
+func (s *Server) handleListTasks(c *gin.Context) {
+	// 获取查询参数
+	statusFilter := c.Query("status")
+
+	// 获取所有任务
+	var allTasks []*downloader.DownloadTask
+
+	// 根据状态过滤获取任务
+	switch statusFilter {
+	case "queued":
+		allTasks = s.downloadMgr.GetQueuedTasks()
+	case "running":
+		allTasks = s.downloadMgr.GetRunningTasks()
+	case "completed", "failed", "cancelled", "paused":
+		completedTasks := s.downloadMgr.GetCompletedTasks()
+		for _, task := range completedTasks {
+			if string(task.GetStatus()) == statusFilter {
+				allTasks = append(allTasks, task)
+			}
+		}
+	default:
+		// 获取所有任务
+		allTasks = append(allTasks, s.downloadMgr.GetQueuedTasks()...)
+		allTasks = append(allTasks, s.downloadMgr.GetRunningTasks()...)
+		allTasks = append(allTasks, s.downloadMgr.GetCompletedTasks()...)
+	}
+
+	c.JSON(200, gin.H{
+		"code":    0,
+		"message": "success",
+		"data":    allTasks,
+	})
+}
+
 // registerSchedulerRoutes 注册调度器相关路由
 func (s *Server) registerSchedulerRoutes(r *gin.RouterGroup) {
 	scheduler := r.Group("/scheduler")
@@ -274,5 +310,6 @@ func (s *Server) registerSchedulerRoutes(r *gin.RouterGroup) {
 
 		// 任务管理
 		scheduler.GET("/tasks/summary", s.handleGetTasksSummary)
+		scheduler.GET("/tasks", s.handleListTasks)
 	}
 }

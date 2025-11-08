@@ -91,7 +91,7 @@
       <el-table-column label="封面" width="150">
         <template #default="{ row }">
           <el-image
-            :src="row.cover"
+            :src="getProxiedImageUrl(row.cover)"
             fit="cover"
             style="width: 120px; height: 68px; border-radius: 4px"
             lazy
@@ -163,6 +163,7 @@ import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search, Link } from '@element-plus/icons-vue'
 import { getVideos, deleteVideo, redownloadVideo, downloadVideoByURL } from '@/api/video'
+import { getProxiedImageUrl } from '@/utils/image'
 import type { Video } from '@/types'
 import dayjs from 'dayjs'
 

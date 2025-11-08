@@ -10,7 +10,7 @@
       <template v-if="video">
         <el-row :gutter="20">
           <el-col :span="8">
-            <el-image :src="video.cover" fit="cover" style="width: 100%; border-radius: 8px" />
+            <el-image :src="getProxiedImageUrl(video.cover)" fit="cover" style="width: 100%; border-radius: 8px" />
           </el-col>
           <el-col :span="16">
             <h2>{{ video.name }}</h2>
@@ -82,6 +82,7 @@
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { getVideo, getVideoPages } from '@/api/video'
+import { getProxiedImageUrl } from '@/utils/image'
 import type { Video, Page } from '@/types'
 import dayjs from 'dayjs'
 
