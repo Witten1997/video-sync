@@ -4,6 +4,7 @@ import (
 	"bili-download/internal/database/models"
 
 	"github.com/gin-gonic/gin"
+	"github.com/shirou/gopsutil/v3/disk"
 )
 
 // DashboardStats 仪表盘统计数据
@@ -31,6 +32,12 @@ type DashboardStats struct {
 	// 存储统计
 	TotalSize  int64 `json:"total_size"`  // 总下载大小（字节）
 	VideoCount int   `json:"video_count"` // 视频文件数量
+
+	// 磁盘空间信息
+	DiskTotal   uint64  `json:"disk_total"`    // 总空间（字节）
+	DiskFree    uint64  `json:"disk_free"`     // 可用空间（字节）
+	DiskUsed    uint64  `json:"disk_used"`     // 已用空间（字节）
+	DiskUsedPct float64 `json:"disk_used_pct"` // 使用百分比
 }
 
 // handleDashboard 获取仪表盘统计数据
@@ -82,6 +89,17 @@ func (s *Server) handleDashboard(c *gin.Context) {
 	// TODO: 实现存储统计（需要扫描下载目录）
 	stats.TotalSize = 0
 	stats.VideoCount = stats.TotalVideos
+
+	// 获取磁盘空间信息
+	if s.config.Paths.DownloadBase != "" {
+		diskStats, err := disk.Usage(s.config.Paths.DownloadBase)
+		if err == nil {
+			stats.DiskTotal = diskStats.Total
+			stats.DiskFree = diskStats.Free
+			stats.DiskUsed = diskStats.Used
+			stats.DiskUsedPct = diskStats.UsedPercent
+		}
+	}
 
 	respondSuccess(c, stats)
 }

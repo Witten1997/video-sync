@@ -9,8 +9,8 @@
         :default-active="activeMenu"
         router
         class="sidebar-menu"
-        background-color="#001529"
-        text-color="#fff"
+        background-color="transparent"
+        text-color="#595959"
         active-text-color="#1890ff"
       >
         <el-menu-item
@@ -120,9 +120,40 @@ const handleRefresh = () => {
 }
 
 .sidebar {
-  background-color: #001529;
+  background: linear-gradient(180deg, #fafbfc 0%, #a6a6cd 100%);
   height: 100%;
   overflow-y: auto;
+  box-shadow: 2px 0 8px rgba(0, 21, 41, 0.08);
+  position: relative;
+  border-right: 1px solid #e8e8e8;
+}
+
+.sidebar::before {
+  content: '';
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: linear-gradient(180deg,
+    rgba(24, 144, 255, 0) 0%,
+    rgba(24, 144, 255, 0.2) 50%,
+    rgba(24, 144, 255, 0) 100%
+  );
+}
+
+/* 自定义滚动条 */
+.sidebar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.sidebar::-webkit-scrollbar-thumb {
+  background: #d9d9d9;
+  border-radius: 3px;
+}
+
+.sidebar::-webkit-scrollbar-thumb:hover {
+  background: #bfbfbf;
 }
 
 .logo {
@@ -130,18 +161,110 @@ const handleRefresh = () => {
   align-items: center;
   justify-content: center;
   height: 64px;
-  color: #fff;
+  color: #1890ff;
   font-size: 20px;
   font-weight: bold;
   gap: 10px;
+  position: relative;
+  margin-bottom: 8px;
+  background: linear-gradient(135deg,
+    rgba(24, 144, 255, 0.08) 0%,
+    rgba(54, 207, 201, 0.08) 100%
+  );
+}
+
+.logo::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 20px;
+  right: 20px;
+  height: 2px;
+  background: linear-gradient(90deg,
+    transparent 0%,
+    rgba(24, 144, 255, 0.3) 50%,
+    transparent 100%
+  );
 }
 
 .logo .el-icon {
   font-size: 28px;
+  background: linear-gradient(135deg, #1890ff, #36cfc9);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 0 6px rgba(24, 144, 255, 0.3));
 }
 
 .sidebar-menu {
   border-right: none;
+  padding: 8px 12px;
+}
+
+/* 自定义菜单项样式 */
+.sidebar-menu :deep(.el-menu-item) {
+  margin-bottom: 4px;
+  border-radius: 8px;
+  height: 48px;
+  line-height: 48px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+  color: #595959;
+}
+
+.sidebar-menu :deep(.el-menu-item)::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: linear-gradient(180deg, #1890ff, #36cfc9);
+  transform: scaleY(0);
+  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  border-radius: 0 3px 3px 0;
+}
+
+.sidebar-menu :deep(.el-menu-item:hover) {
+  background: #e6f7ff !important;
+  color: #1890ff !important;
+  transform: translateX(4px);
+}
+
+.sidebar-menu :deep(.el-menu-item:hover)::before {
+  transform: scaleY(1);
+}
+
+.sidebar-menu :deep(.el-menu-item.is-active) {
+  background: linear-gradient(135deg,
+    rgba(24, 144, 255, 0.12) 0%,
+    rgba(54, 207, 201, 0.12) 100%
+  ) !important;
+  color: #1890ff !important;
+  font-weight: 500;
+  border: 1px solid rgba(24, 144, 255, 0.2);
+  box-shadow: 0 2px 8px rgba(24, 144, 255, 0.15);
+}
+
+.sidebar-menu :deep(.el-menu-item.is-active)::before {
+  transform: scaleY(1);
+}
+
+.sidebar-menu :deep(.el-menu-item .el-icon) {
+  font-size: 18px;
+  margin-right: 8px;
+  transition: all 0.3s;
+  color: #8c8c8c;
+}
+
+.sidebar-menu :deep(.el-menu-item:hover .el-icon) {
+  transform: scale(1.1);
+  color: #36cfc9;
+}
+
+.sidebar-menu :deep(.el-menu-item.is-active .el-icon) {
+  color: #36cfc9;
+  filter: drop-shadow(0 0 3px rgba(54, 207, 201, 0.4));
 }
 
 .header {
@@ -151,6 +274,7 @@ const handleRefresh = () => {
   border-bottom: 1px solid #f0f0f0;
   background: #fff;
   padding: 0 20px;
+  box-shadow: 0 1px 4px rgba(0, 21, 41, 0.08);
 }
 
 .header-left {
@@ -161,6 +285,15 @@ const handleRefresh = () => {
   display: flex;
   align-items: center;
   gap: 15px;
+}
+
+.header-right :deep(.el-button) {
+  transition: all 0.3s;
+}
+
+.header-right :deep(.el-button:hover) {
+  color: #1890ff;
+  transform: scale(1.1);
 }
 
 .main-content {

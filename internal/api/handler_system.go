@@ -5,6 +5,8 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/shirou/gopsutil/v3/cpu"
+	"github.com/shirou/gopsutil/v3/mem"
 )
 
 // SystemInfo 系统信息
@@ -46,17 +48,43 @@ func (s *Server) handleSystemStats(c *gin.Context) {
 	var m runtime.MemStats
 	runtime.ReadMemStats(&m)
 
+	// CPU信息
+	cpuPercent, _ := cpu.Percent(time.Second, false)
+	cpuValue := 0.0
+	if len(cpuPercent) > 0 {
+		cpuValue = cpuPercent[0]
+	}
+	cpuCores, _ := cpu.Counts(true)
+
+	// 内存信息
+	memStats, _ := mem.VirtualMemory()
+
 	respondSuccess(c, gin.H{
-		"goroutines": runtime.NumGoroutine(),
+		"cpu": gin.H{
+			"percent": cpuValue,
+			"cores":   cpuCores,
+		},
 		"memory": gin.H{
-			"alloc":       m.Alloc,
-			"total_alloc": m.TotalAlloc,
-			"sys":         m.Sys,
-			"num_gc":      m.NumGC,
+			"total":        memStats.Total,
+			"used":         memStats.Used,
+			"free":         memStats.Free,
+			"used_percent": memStats.UsedPercent,
+		},
+		"go_runtime": gin.H{
+			"goroutines":   runtime.NumGoroutine(),
+			"version":      runtime.Version(),
+			"heap_alloc":   m.HeapAlloc,
+			"heap_sys":     m.HeapSys,
+			"heap_objects": m.HeapObjects,
+			"alloc":        m.Alloc,
+			"total_alloc":  m.TotalAlloc,
+			"sys":          m.Sys,
+			"num_gc":       m.NumGC,
 		},
 		"download_manager": gin.H{
 			"running": s.downloadMgr.IsRunning(),
 			"stats":   s.downloadMgr.GetStats(),
 		},
+		"timestamp": time.Now().Unix(),
 	})
 }

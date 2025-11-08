@@ -25,14 +25,26 @@
         <el-option label="UP主投稿" value="submission" />
         <el-option label="URL下载" value="url" />
       </el-select>
-      <el-button @click="loadData">
-        <el-icon><Refresh /></el-icon>
-        刷新
-      </el-button>
-      <el-button type="primary" @click="showDownloadDialog">
-        <el-icon><Link /></el-icon>
-        通过URL下载
-      </el-button>
+      <div class="toolbar-right">
+        <el-radio-group v-model="viewMode" size="small">
+          <el-radio-button label="list">
+            <el-icon><List /></el-icon>
+            列表
+          </el-radio-button>
+          <el-radio-button label="grid">
+            <el-icon><Grid /></el-icon>
+            卡片
+          </el-radio-button>
+        </el-radio-group>
+        <el-button @click="loadData">
+          <el-icon><Refresh /></el-icon>
+          刷新
+        </el-button>
+        <el-button type="primary" @click="showDownloadDialog">
+          <el-icon><Link /></el-icon>
+          通过URL下载
+        </el-button>
+      </div>
     </div>
 
     <!-- URL下载对话框 -->
@@ -81,7 +93,9 @@
       </template>
     </el-dialog>
 
+    <!-- 列表视图 -->
     <el-table
+      v-if="viewMode === 'list'"
       v-loading="loading"
       :data="videos"
       border
@@ -143,6 +157,63 @@
       </el-table-column>
     </el-table>
 
+    <!-- 卡片视图 -->
+    <div v-else class="grid-view" v-loading="loading">
+      <div v-for="item in videos" :key="item.id" class="grid-item">
+        <el-card :body-style="{ padding: '0px' }" shadow="hover">
+          <el-image
+            :src="getProxiedImageUrl(item.cover)"
+            fit="cover"
+            class="grid-cover"
+            lazy
+            @click="handleViewDetail(item)"
+            style="cursor: pointer"
+          >
+            <template #error>
+              <div class="image-slot-grid">
+                <el-icon><Picture /></el-icon>
+              </div>
+            </template>
+          </el-image>
+          <div class="grid-content">
+            <div class="grid-title" :title="item.name" @click="handleViewDetail(item)">
+              {{ item.name }}
+            </div>
+            <div class="grid-info">
+              <el-text size="small" type="info">{{ item.upper_name }}</el-text>
+            </div>
+            <div class="grid-meta">
+              <el-tag size="small" type="info">{{ item.bvid }}</el-tag>
+              <el-tag size="small">{{ item.single_page ? '单P' : '多P' }}</el-tag>
+            </div>
+            <div class="grid-status">
+              <el-tag v-if="!item.valid" type="danger" size="small">无效</el-tag>
+              <el-tag v-else-if="item.download_status === 0" type="info" size="small">待下载</el-tag>
+              <el-tag v-else-if="isDownloadComplete(item.download_status)" type="success" size="small">已完成</el-tag>
+              <el-tag v-else type="warning" size="small">下载中</el-tag>
+            </div>
+            <div class="grid-time">
+              <el-text size="small" type="info">{{ formatTime(item.pubtime) }}</el-text>
+            </div>
+            <div class="grid-actions">
+              <el-button-group>
+                <el-button size="small" @click="handleViewDetail(item)">
+                  <el-icon><View /></el-icon>
+                  详情
+                </el-button>
+                <el-button size="small" @click="handleRedownload(item)">
+                  <el-icon><Download /></el-icon>
+                </el-button>
+                <el-button size="small" type="danger" @click="handleDelete(item)">
+                  <el-icon><Delete /></el-icon>
+                </el-button>
+              </el-button-group>
+            </div>
+          </div>
+        </el-card>
+      </div>
+    </div>
+
     <div class="pagination">
       <el-pagination
         v-model:current-page="currentPage"
@@ -161,7 +232,7 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Search, Link } from '@element-plus/icons-vue'
+import { Search, Link, List, Grid } from '@element-plus/icons-vue'
 import { getVideos, deleteVideo, redownloadVideo, downloadVideoByURL } from '@/api/video'
 import { getProxiedImageUrl } from '@/utils/image'
 import type { Video } from '@/types'
@@ -179,6 +250,7 @@ const filterSourceType = ref('')
 const currentPage = ref(1)
 const pageSize = ref(20)
 const total = ref(0)
+const viewMode = ref<'list' | 'grid'>('list')
 
 // URL下载对话框
 const downloadDialogVisible = ref(false)
@@ -331,6 +403,14 @@ onMounted(() => {
   margin-bottom: 20px;
   display: flex;
   gap: 10px;
+  align-items: center;
+}
+
+.toolbar-right {
+  margin-left: auto;
+  display: flex;
+  gap: 10px;
+  align-items: center;
 }
 
 .pagination {
@@ -348,5 +428,88 @@ onMounted(() => {
   background: #f5f7fa;
   color: #909399;
   font-size: 30px;
+}
+
+/* 卡片视图样式 */
+.grid-view {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 20px;
+  margin-top: 20px;
+}
+
+.grid-item {
+  height: 100%;
+}
+
+.grid-cover {
+  width: 100%;
+  height: 160px;
+  object-fit: cover;
+  display: block;
+}
+
+.image-slot-grid {
+  width: 100%;
+  height: 160px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f5f7fa;
+  color: #909399;
+  font-size: 40px;
+}
+
+.grid-content {
+  padding: 12px;
+}
+
+.grid-title {
+  font-size: 14px;
+  font-weight: 500;
+  margin-bottom: 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  line-height: 1.4;
+  min-height: 40px;
+  cursor: pointer;
+}
+
+.grid-title:hover {
+  color: #409eff;
+}
+
+.grid-info {
+  margin-bottom: 8px;
+}
+
+.grid-meta {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.grid-status {
+  margin-bottom: 8px;
+}
+
+.grid-time {
+  margin-bottom: 12px;
+}
+
+.grid-actions {
+  display: flex;
+  justify-content: center;
+}
+
+.grid-actions .el-button-group {
+  width: 100%;
+}
+
+.grid-actions .el-button {
+  flex: 1;
 }
 </style>

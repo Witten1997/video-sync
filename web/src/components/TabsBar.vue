@@ -144,10 +144,11 @@ const handleCloseAll = () => {
 .tabs-bar {
   background: #fff;
   border-bottom: 1px solid #e8e8e8;
-  padding: 0;
-  height: 40px;
+  padding: 0 12px;
+  height: 44px;
   display: flex;
   align-items: center;
+  box-shadow: 0 1px 4px rgba(0, 21, 41, 0.08);
 }
 
 .tabs-wrapper {
@@ -157,54 +158,117 @@ const handleCloseAll = () => {
   overflow-x: auto;
   overflow-y: hidden;
   flex: 1;
+  gap: 4px;
 }
 
 .tabs-wrapper::-webkit-scrollbar {
-  height: 0;
+  height: 3px;
+}
+
+.tabs-wrapper::-webkit-scrollbar-thumb {
+  background: #d9d9d9;
+  border-radius: 3px;
+}
+
+.tabs-wrapper::-webkit-scrollbar-thumb:hover {
+  background: #bfbfbf;
 }
 
 .tab-item {
+  position: relative;
   display: inline-flex;
   align-items: center;
-  padding: 0 16px;
+  padding: 0 20px;
   height: 32px;
-  margin: 4px 0 4px 4px;
-  background: #fafafa;
-  border: 1px solid #e8e8e8;
-  border-radius: 2px;
+  background: #f5f5f5;
+  border-radius: 6px;
   cursor: pointer;
   user-select: none;
   white-space: nowrap;
-  transition: all 0.3s;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  font-size: 13px;
+  color: #595959;
+  border: 1px solid transparent;
+  overflow: hidden;
+}
+
+.tab-item::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  height: 2px;
+  background: linear-gradient(90deg, #1890ff, #36cfc9);
+  transform: scaleX(0);
+  transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .tab-item:hover {
   background: #e6f7ff;
+  color: #1890ff;
   border-color: #91d5ff;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(24, 144, 255, 0.15);
 }
 
 .tab-item.active {
-  background: #1890ff;
-  border-color: #1890ff;
+  background: linear-gradient(135deg, #1890ff 0%, #36cfc9 100%);
   color: #fff;
+  font-weight: 500;
+  border-color: transparent;
+  box-shadow: 0 2px 12px rgba(24, 144, 255, 0.35);
+}
+
+.tab-item.active::before {
+  transform: scaleX(1);
 }
 
 .tab-title {
-  font-size: 14px;
-  margin-right: 8px;
+  font-size: 13px;
+  margin-right: 6px;
+  letter-spacing: 0.3px;
 }
 
 .tab-close {
-  font-size: 12px;
-  transition: all 0.3s;
+  font-size: 14px;
+  padding: 2px;
+  border-radius: 50%;
+  transition: all 0.25s;
+  opacity: 0.7;
 }
 
 .tab-close:hover {
-  font-size: 14px;
-  color: #ff4d4f;
+  opacity: 1;
+  background: rgba(0, 0, 0, 0.1);
+  transform: rotate(90deg);
+}
+
+.tab-item.active .tab-close {
+  opacity: 0.9;
 }
 
 .tab-item.active .tab-close:hover {
-  color: #fff;
+  background: rgba(255, 255, 255, 0.2);
+  opacity: 1;
+}
+
+/* 为非激活标签添加左侧小竖线装饰 */
+.tab-item:not(.active)::after {
+  content: '';
+  position: absolute;
+  left: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 14px;
+  background: #1890ff;
+  border-radius: 2px;
+  opacity: 0;
+  transition: opacity 0.25s;
+}
+
+.tab-item:not(.active):hover::after {
+  opacity: 0.5;
 }
 </style>
