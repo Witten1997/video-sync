@@ -146,15 +146,11 @@ make lint
 make build-all
 ```
 
-### 数据库迁移
-
-TODO: 数据库迁移说明
-
 ## 使用指南
 
 ### 添加视频源
 
-1. 访问 Web 界面：http://localhost:8080
+1. 访问 Web 界面：http://localhost:3000
 2. 进入"视频源管理"页面
 3. 点击"添加视频源"
 4. 输入收藏夹 ID、UP主 ID 或合集 URL
@@ -187,10 +183,6 @@ downloads/
 
 在 Emby/Jellyfin 中添加媒体库时，将 `downloads/` 目录添加为电影或电视剧库即可。
 
-## API 文档
-
-TODO: API 文档链接
-
 ## 常见问题
 
 ### Q: 如何获取收藏夹 ID？
@@ -205,17 +197,9 @@ A: 检查以下几点：
 3. 查看日志文件中的错误信息
 4. 可能触发了 B站 风控，等待一段时间后重试
 
-### Q: 如何从 SQLite 迁移到 PostgreSQL？
-
-A: 请参考 [数据库迁移指南](./docs/migration.md)。
-
 ## 贡献
 
 欢迎提交 Issue 和 Pull Request！
-
-## 许可证
-
-TODO: 添加许可证
 
 ## 致谢
 

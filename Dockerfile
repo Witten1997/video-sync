@@ -1,55 +1,92 @@
-# 构建阶段
-FROM golang:1.23.3-alpine AS builder
+# 前端构建阶段
+FROM node:20-alpine AS web-builder
 
-# 安装构建依赖
+WORKDIR /web
+COPY web/package*.json ./
+RUN npm ci --only=production
+COPY web/ ./
+RUN npm run build
+
+# 后端构建阶段
+FROM golang:1.23.3-alpine AS backend-builder
+
 RUN apk add --no-cache git make
-
-# 设置工作目录
 WORKDIR /build
 
-# 复制 go mod 文件
+# 优化构建缓存：先复制依赖文件
 COPY go.mod go.sum ./
-
-# 下载依赖
 RUN go mod download
 
-# 复制源代码
-COPY . .
+# 再复制源码
+COPY cmd/ ./cmd/
+COPY internal/ ./internal/
+COPY pkg/ ./pkg/
 
-# 编译项目
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -ldflags '-w -s' -o bili-download ./cmd/server
+# 构建二进制文件
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
+    -a -installsuffix cgo \
+    -ldflags '-w -s -extldflags "-static"' \
+    -o video-sync ./cmd/server
 
-# 运行阶段
+# 最终运行阶段
 FROM alpine:latest
 
 # 安装运行时依赖
-RUN apk add --no-cache ca-certificates tzdata python3 py3-pip ffmpeg
+RUN apk add --no-cache \
+    ca-certificates \
+    tzdata \
+    python3 \
+    py3-pip \
+    ffmpeg \
+    wget \
+    su-exec && \
+    # 安装 yt-dlp
+    pip3 install --no-cache-dir yt-dlp && \
+    # 清理缓存
+    rm -rf /var/cache/apk/* /root/.cache
 
-# 安装 yt-dlp
-RUN pip3 install --no-cache-dir yt-dlp
+# 设置时区
+ENV TZ=Asia/Shanghai
 
-# 创建非 root 用户
-RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+# 创建非特权用户
+RUN addgroup -g 1000 -S appgroup && \
+    adduser -u 1000 -S appuser -G appgroup
 
 # 设置工作目录
 WORKDIR /app
 
-# 从构建阶段复制二进制文件
-COPY --from=builder /build/bili-download .
+# 从构建阶段复制文件
+COPY --from=backend-builder /build/video-sync .
+COPY --from=web-builder /web/dist ./web/dist
 
-# 创建必要的目录
-RUN mkdir -p /app/configs /downloads /metadata /var/log/bili-sync && \
-    chown -R appuser:appgroup /app /downloads /metadata /var/log/bili-sync
+# 复制启动脚本
+COPY docker-entrypoint.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
-# 切换到非 root 用户
+# 创建必要的目录并设置权限
+RUN mkdir -p \
+    /app/configs \
+    /downloads \
+    /metadata \
+    /var/log/video-sync && \
+    chown -R appuser:appgroup \
+    /app \
+    /downloads \
+    /metadata \
+    /var/log/video-sync
+
+# 声明数据卷
+VOLUME ["/downloads", "/metadata", "/app/configs"]
+
+# 切换到非特权用户
 USER appuser
 
 # 暴露端口
 EXPOSE 8080
 
 # 健康检查
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
     CMD wget --no-verbose --tries=1 --spider http://localhost:8080/health || exit 1
 
-# 启动应用
-CMD ["./bili-download"]
+# 使用启动脚本
+ENTRYPOINT ["docker-entrypoint.sh"]

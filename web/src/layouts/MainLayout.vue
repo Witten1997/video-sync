@@ -2,7 +2,7 @@
   <el-container class="layout-container">
     <el-aside width="250px" class="sidebar">
       <div class="logo">
-        <el-icon><VideoPlay /></el-icon>
+        <img src="/logo.png" alt="Video Sync Logo" class="logo-image" />
         <span>Video Sync</span>
       </div>
       <el-menu
@@ -192,6 +192,13 @@ const handleRefresh = () => {
   background: linear-gradient(135deg, #1890ff, #36cfc9);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 0 6px rgba(24, 144, 255, 0.3));
+}
+
+.logo-image {
+  width: 40px;
+  height: 40px;
+  object-fit: contain;
   filter: drop-shadow(0 0 6px rgba(24, 144, 255, 0.3));
 }
 
