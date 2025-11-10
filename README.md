@@ -13,6 +13,24 @@
 - 🐳 **容器化部署**：支持 Docker 和 Docker Compose
 - 📊 **PostgreSQL 数据库**：高性能数据存储和查询
 
+## 项目预览
+- 仪表盘
+![img.png](img/img.png)
+- 快捷订阅
+![img_1.png](img/img_1.png)
+![img_2.png](img/img_2.png)
+- 任务源管理
+![img_3.png](img/img_3.png)
+- 视频列表
+![img_4.png](img/img_4.png)
+- 任务管理
+![img_5.png](img/img_5.png)
+- 配置
+![img_8.png](img/img_8.png)
+![img_9.png](img/img_9.png)
+![img_10.png](img/img_10.png)
+![img_11.png](img/img_11.png)
+![img_12.png](img/img_12.png)
 ## 技术栈
 
 - **后端**: Go 1.23.3
