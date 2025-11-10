@@ -91,6 +91,13 @@ func (s *Server) setupRouter() {
 		api.GET("/system/info", s.handleSystemInfo)
 		api.GET("/system/stats", s.handleSystemStats)
 
+		// 认证（二维码登录）
+		auth := api.Group("/auth")
+		{
+			auth.GET("/qrcode/generate", s.handleQRCodeGenerate) // 生成二维码
+			auth.GET("/qrcode/poll", s.handleQRCodePoll)         // 轮询二维码状态
+		}
+
 		// yt-dlp 版本管理
 		ytdlp := api.Group("/ytdlp")
 		{

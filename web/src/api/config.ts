@@ -32,3 +32,22 @@ export const validateBilibiliCredential = () => {
     }
   }>('/config/validate-credential')
 }
+
+// ==================== 二维码登录 API ====================
+
+// 生成二维码
+export const generateQRCode = () => {
+  return http.get<{
+    url: string
+    qrcode_key: string
+    expires_in: number
+  }>('/auth/qrcode/generate')
+}
+
+// 轮询二维码状态
+export const pollQRCodeStatus = (qrcodeKey: string) => {
+  return http.get<{
+    status: number
+    message: string
+  }>(`/auth/qrcode/poll?qrcode_key=${qrcodeKey}`)
+}

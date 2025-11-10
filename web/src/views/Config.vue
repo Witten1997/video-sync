@@ -29,7 +29,87 @@
         </el-tab-pane>
 
         <el-tab-pane label="B站认证" name="bilibili">
-          <el-form :model="config.bilibili.credential" label-width="180px">
+          <!-- 认证方式选择 -->
+          <el-radio-group v-model="authMethod" style="margin-bottom: 20px">
+            <el-radio-button value="qrcode">扫码登录</el-radio-button>
+            <el-radio-button value="manual">手动输入</el-radio-button>
+          </el-radio-group>
+
+          <!-- 扫码登录 -->
+          <div v-if="authMethod === 'qrcode'" class="qrcode-login">
+            <div v-if="!qrcode.url" class="qrcode-placeholder">
+              <el-button
+                type="primary"
+                :loading="qrcode.loading"
+                :icon="qrcode.loading ? '' : 'Refresh'"
+                @click="handleGenerateQRCode"
+              >
+                {{ qrcode.loading ? '生成中...' : '生成二维码' }}
+              </el-button>
+              <p class="tip">点击按钮生成二维码，使用 B站 APP 扫描登录</p>
+            </div>
+
+            <div v-else class="qrcode-container">
+              <div class="qrcode-wrapper">
+                <canvas ref="qrcodeCanvas" />
+
+                <!-- 状态遮罩 -->
+                <div v-if="qrcode.status !== 86101" class="qrcode-mask">
+                  <!-- 已扫码未确认 -->
+                  <div v-if="qrcode.status === 86090" class="status-box status-scanned">
+                    <el-icon :size="48" color="#67c23a"><SuccessFilled /></el-icon>
+                    <p>已扫码，请在手机上确认</p>
+                  </div>
+                  <!-- 登录成功 -->
+                  <div v-else-if="qrcode.status === 0" class="status-box status-success">
+                    <el-icon :size="48" color="#67c23a"><CircleCheckFilled /></el-icon>
+                    <p>登录成功！</p>
+                    <p class="sub">页面即将刷新...</p>
+                  </div>
+                  <!-- 二维码失效 -->
+                  <div v-else-if="qrcode.status === 86038" class="status-box status-expired">
+                    <el-icon :size="48" color="#f56c6c"><CircleCloseFilled /></el-icon>
+                    <p>二维码已失效</p>
+                    <el-button type="primary" size="small" @click="handleGenerateQRCode">
+                      重新生成
+                    </el-button>
+                  </div>
+                </div>
+              </div>
+
+              <div class="qrcode-info">
+                <el-alert
+                  :type="qrcode.status === 86101 ? 'info' : qrcode.status === 86090 ? 'warning' : 'success'"
+                  :closable="false"
+                  show-icon
+                >
+                  <template #title>
+                    <div class="alert-title">{{ qrcode.message }}</div>
+                  </template>
+                  <div v-if="qrcode.status === 86101">
+                    请使用 B站 APP 扫描二维码
+                  </div>
+                  <div v-else-if="qrcode.status === 86090">
+                    请在手机上点击"确认登录"
+                  </div>
+                  <div v-else-if="qrcode.status === 0">
+                    凭据已保存到服务器配置
+                  </div>
+                </el-alert>
+
+                <div class="qrcode-footer">
+                  <div class="countdown">
+                    <el-icon><Clock /></el-icon>
+                    <span>有效期: {{ qrcode.remainingTime }}秒</span>
+                  </div>
+                  <el-button text @click="handleCancelQRCode">取消</el-button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 手动输入认证 -->
+          <el-form v-else :model="config.bilibili.credential" label-width="180px">
             <el-form-item label="SESSDATA">
               <el-input v-model="config.bilibili.credential.sessdata" type="password" show-password />
             </el-form-item>
@@ -319,11 +399,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted, nextTick } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Refresh, Upload } from '@element-plus/icons-vue'
-import { getConfig, updateConfig, validateBilibiliCredential } from '@/api/config'
+import { Refresh, Upload, Clock, SuccessFilled, CircleCheckFilled, CircleCloseFilled } from '@element-plus/icons-vue'
+import { getConfig, updateConfig, validateBilibiliCredential, generateQRCode, pollQRCodeStatus } from '@/api/config'
 import { getYtdlpVersionInfo, updateYtdlpVersion } from '@/api/ytdlp'
+import QRCode from 'qrcode'
 
 defineOptions({
   name: 'Config'
@@ -380,6 +461,28 @@ const credentialValidation = ref<{
   valid: false,
   message: ''
 })
+
+// ==================== 二维码登录状态 ====================
+
+// 认证方式（qrcode: 扫码登录, manual: 手动输入）
+const authMethod = ref<'qrcode' | 'manual'>('qrcode')
+
+// 二维码canvas元素引用
+const qrcodeCanvas = ref<HTMLCanvasElement>()
+
+// 二维码状态
+const qrcode = ref({
+  loading: false,
+  url: '',
+  qrcode_key: '',
+  status: null as number | null,
+  message: '',
+  remainingTime: 180
+})
+
+// 轮询和倒计时定时器
+let pollTimer: number | null = null
+let countdownTimer: number | null = null
 
 const config = ref<Config>({
   server: {
@@ -642,9 +745,139 @@ const updateYtdlp = async () => {
   }
 }
 
+// ==================== 二维码登录处理函数 ====================
+
+// 生成二维码
+const handleGenerateQRCode = async () => {
+  qrcode.value.loading = true
+
+  try {
+    const data = await generateQRCode()
+
+    qrcode.value = {
+      loading: false,
+      url: data.url,
+      qrcode_key: data.qrcode_key,
+      status: 86101,
+      message: '等待扫码',
+      remainingTime: data.expires_in
+    }
+
+    // 等待 Vue 更新 DOM
+    await nextTick()
+
+    // 生成二维码图片
+    if (qrcodeCanvas.value) {
+      await QRCode.toCanvas(qrcodeCanvas.value, data.url, {
+        width: 256,
+        margin: 2,
+        color: {
+          dark: '#000000',
+          light: '#FFFFFF'
+        }
+      })
+    } else {
+      console.error('Canvas 元素未找到')
+      ElMessage.error('二维码显示失败，请刷新页面重试')
+      return
+    }
+
+    // 开始轮询
+    startPolling()
+    // 开始倒计时
+    startCountdown()
+  } catch (error: any) {
+    console.error('生成二维码失败:', error)
+    ElMessage.error(error?.response?.data?.message || '生成二维码失败')
+    qrcode.value.loading = false
+  }
+}
+
+// 开始轮询二维码状态
+const startPolling = () => {
+  const poll = async () => {
+    try {
+      const data = await pollQRCodeStatus(qrcode.value.qrcode_key)
+
+      qrcode.value.status = data.status
+      qrcode.value.message = data.message
+
+      // 登录成功或失效，停止轮询
+      if (data.status === 0 || data.status === 86038) {
+        stopPolling()
+        stopCountdown()
+
+        if (data.status === 0) {
+          ElMessage.success('登录成功！凭据已保存')
+          // 2秒后刷新页面
+          setTimeout(() => {
+            window.location.reload()
+          }, 2000)
+        }
+      }
+    } catch (error: any) {
+      console.error('轮询失败:', error)
+    }
+  }
+
+  // 立即执行一次
+  poll()
+  // 每2秒轮询一次
+  pollTimer = window.setInterval(poll, 2000)
+}
+
+// 停止轮询
+const stopPolling = () => {
+  if (pollTimer) {
+    clearInterval(pollTimer)
+    pollTimer = null
+  }
+}
+
+// 开始倒计时
+const startCountdown = () => {
+  countdownTimer = window.setInterval(() => {
+    qrcode.value.remainingTime--
+    if (qrcode.value.remainingTime <= 0) {
+      qrcode.value.status = 86038
+      qrcode.value.message = '二维码已失效'
+      stopPolling()
+      stopCountdown()
+    }
+  }, 1000)
+}
+
+// 停止倒计时
+const stopCountdown = () => {
+  if (countdownTimer) {
+    clearInterval(countdownTimer)
+    countdownTimer = null
+  }
+}
+
+// 取消二维码登录
+const handleCancelQRCode = () => {
+  stopPolling()
+  stopCountdown()
+  qrcode.value = {
+    loading: false,
+    url: '',
+    qrcode_key: '',
+    status: null,
+    message: '',
+    remainingTime: 180
+  }
+}
+
 onMounted(() => {
   loadData()
   checkYtdlpVersion()
+})
+
+// 组件卸载时清理定时器
+onUnmounted(() => {
+  stopPolling()
+  stopCountdown()
 })
 </script>
 
@@ -681,4 +914,108 @@ onMounted(() => {
   align-items: center;
   gap: 10px;
 }
+
+/* ==================== 二维码登录样式 ==================== */
+
+.qrcode-login {
+  max-width: 600px;
+}
+
+.qrcode-placeholder {
+  text-align: center;
+  padding: 60px 20px;
+}
+
+.qrcode-placeholder .tip {
+  margin-top: 15px;
+  font-size: 14px;
+  color: #909399;
+}
+
+.qrcode-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+}
+
+.qrcode-wrapper {
+  position: relative;
+  display: inline-block;
+}
+
+.qrcode-wrapper canvas {
+  display: block;
+  border: 1px solid #dcdfe6;
+  border-radius: 4px;
+}
+
+.qrcode-mask {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(255, 255, 255, 0.95);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+}
+
+.status-box {
+  text-align: center;
+  padding: 20px;
+}
+
+.status-box p {
+  margin: 12px 0 0 0;
+  font-size: 16px;
+  font-weight: 500;
+  color: #303133;
+}
+
+.status-box .sub {
+  margin-top: 8px;
+  font-size: 14px;
+  font-weight: normal;
+  color: #909399;
+}
+
+.status-box .el-button {
+  margin-top: 15px;
+}
+
+.qrcode-info {
+  width: 100%;
+  max-width: 400px;
+}
+
+.alert-title {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.qrcode-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 15px;
+  padding-top: 15px;
+  border-top: 1px solid #ebeef5;
+}
+
+.countdown {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: #606266;
+}
+
+.countdown .el-icon {
+  font-size: 16px;
+  color: #909399;
+}
+
 </style>

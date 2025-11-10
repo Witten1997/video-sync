@@ -129,7 +129,7 @@ func (c *Client) GetCredential() *Credential {
 	return c.credential
 }
 
-// UpdateCredential 更新客户端凭据
+// UpdateCredential 更新客户端凭据（从配置）
 func (c *Client) UpdateCredential(credentialCfg *config.CredentialConfig) {
 	c.credential = &Credential{
 		SESSDATA:    credentialCfg.SESSDATA,
