@@ -4,7 +4,7 @@
       <!-- 视频封面 -->
       <div class="task-cover">
         <el-image
-          :src="task.video.cover"
+          :src="coverUrl"
           fit="cover"
           lazy
         >
@@ -157,6 +157,7 @@ import {
   Delete
 } from '@element-plus/icons-vue'
 import type { Task } from '@/types'
+import { getProxiedImageUrl } from '@/utils/image'
 
 interface Props {
   task: Task
@@ -180,6 +181,9 @@ const props = withDefaults(defineProps<Props>(), {
 })
 
 const emit = defineEmits<Emits>()
+
+// 获取代理后的封面图片URL
+const coverUrl = computed(() => getProxiedImageUrl(props.task.video.cover))
 
 // 任务类型文本
 const getTypeText = (type: string): string => {

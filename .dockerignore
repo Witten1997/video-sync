@@ -1,6 +1,7 @@
 # Build artifacts
 build/
 dist/
+bin/
 
 # Config files
 configs/config.yaml
@@ -34,19 +35,23 @@ metadata/
 # Git
 .git/
 .gitignore
+.gitattributes
 
 # macOS
 .DS_Store
 
 # Windows
 Thumbs.db
+desktop.ini
 
 # Frontend
 web/node_modules/
 web/dist/
+web/.vite/
 
 # Dependencies
 vendor/
+node_modules/
 
 # Temporary files
 tmp/
@@ -55,8 +60,21 @@ temp/
 
 # Docker
 .docker-data/
+Dockerfile
+docker-compose.yml
+.dockerignore
 
 # Test files
 coverage.out
 coverage.html
 *.test
+
+# Documentation (optional)
+*.md
+!README.md
+
+# Images for documentation
+img/
+
+# Other files
+nul

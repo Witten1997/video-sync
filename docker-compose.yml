@@ -1,76 +1,74 @@
 version: '3.8'
 
 services:
-  postgres:
-    image: postgres:15-alpine
-    container_name: video-sync-db
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-bili_sync}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-bili_sync_password}
-      POSTGRES_DB: ${POSTGRES_DB:-bili_sync}
-      TZ: ${TZ:-Asia/Shanghai}
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    networks:
-      - video-sync-network
-    # 不暴露端口到宿主机（安全考虑）
-    expose:
-      - "5432"
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-bili_sync}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
   video-sync:
     build:
       context: .
       dockerfile: Dockerfile
     image: video-sync:latest
     container_name: video-sync
-    depends_on:
-      postgres:
-        condition: service_healthy
-    environment:
-      # 数据库配置
-      DATABASE_HOST: postgres
-      DB_HOST: postgres
-      DB_PORT: 5432
-      DB_USER: ${POSTGRES_USER:-bili_sync}
-      DB_PASSWORD: ${POSTGRES_PASSWORD:-bili_sync_password}
-      DB_NAME: ${POSTGRES_DB:-bili_sync}
-      DB_SSLMODE: disable
-      # 时区
-      TZ: ${TZ:-Asia/Shanghai}
-      # 应用配置
-      APP_PORT: ${APP_PORT:-8080}
-    volumes:
-      # 配置文件目录
-      - ./configs:/app/configs
-      # 下载文件目录
-      - ${DOWNLOAD_PATH:-./downloads}:/downloads
-      # 元数据目录
-      - ${METADATA_PATH:-./metadata}:/metadata
-      # 日志目录
-      - ${LOG_PATH:-./logs}:/var/log/video-sync
-    networks:
-      - video-sync-network
-    ports:
-      - "${APP_PORT:-8080}:8080"
     restart: unless-stopped
+
+    # 环境变量配置
+    environment:
+      # 时区设置
+      - TZ=Asia/Shanghai
+
+      # PostgreSQL 数据库配置
+      - POSTGRES_USER=bili_sync
+      - POSTGRES_PASSWORD=your_secure_password_here
+      - POSTGRES_DB=bili_sync
+
+      # 应用配置（可选）
+      - APP_PORT=8080
+
+    # 端口映射 - 只开放前端端口
+    ports:
+      - "8080:80"        # 前端服务端口（映射到本地8080）
+      # PostgreSQL 端口不对外开放
+      # 后端服务端口不对外开放
+
+    # 数据卷挂载
+    volumes:
+      # PostgreSQL 数据持久化
+      - postgres_data:/var/lib/postgresql/data
+
+      # 下载文件存储
+      - ./downloads:/downloads
+
+      # 元数据存储
+      - ./metadata:/metadata
+
+      # 日志文件
+      - ./logs:/var/log/bili-sync
+
+      # 配置文件（可选，用于自定义配置）
+      - ./configs:/app/configs
+
+    # 健康检查
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
+      test: ["CMD", "curl", "-f", "http://localhost/api/health"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 30s
+      start_period: 60s
 
-networks:
-  video-sync-network:
-    driver: bridge
+    # 资源限制（可选，根据实际情况调整）
+    # deploy:
+    #   resources:
+    #     limits:
+    #       cpus: '2'
+    #       memory: 4G
+    #     reservations:
+    #       cpus: '1'
+    #       memory: 2G
 
+# 数据卷定义
 volumes:
   postgres_data:
     driver: local
 
+# 网络配置（可选）
+# networks:
+#   default:
+#     driver: bridge

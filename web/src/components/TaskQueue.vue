@@ -299,8 +299,9 @@ const refreshTasks = async () => {
 }
 
 // Tab 切换
-const handleTabChange = () => {
+const handleTabChange = async () => {
   currentPage.value = 1
+  await fetchTasks()
 }
 
 // 排序改变
