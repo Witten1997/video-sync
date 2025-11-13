@@ -21,6 +21,8 @@ import TaskQueue from '@/components/TaskQueue.vue'
 const schedulerControlRef = ref<InstanceType<typeof SchedulerControl>>()
 const taskQueueRef = ref<InstanceType<typeof TaskQueue>>()
 
+let ws: WebSocket | null = null
+
 // WebSocket 消息处理
 const handleWebSocketMessage = (event: MessageEvent) => {
   try {
@@ -28,6 +30,12 @@ const handleWebSocketMessage = (event: MessageEvent) => {
 
     // 根据消息类型更新组件
     switch (message.type) {
+      case 'config_updated':
+        // 配置更新时刷新调度器状态
+        console.log('收到配置更新事件，刷新调度器状态')
+        schedulerControlRef.value?.refreshStatus()
+        break
+
       case 'scheduler_started':
       case 'scheduler_stopped':
       case 'sync_started':
@@ -56,16 +64,51 @@ const handleWebSocketMessage = (event: MessageEvent) => {
   }
 }
 
+// 连接 WebSocket
+const connectWebSocket = () => {
+  try {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+    const host = window.location.host
+    ws = new WebSocket(`${protocol}//${host}/api/ws`)
+
+    ws.onopen = () => {
+      console.log('WebSocket connected')
+    }
+
+    ws.onmessage = handleWebSocketMessage
+
+    ws.onerror = (error) => {
+      console.error('WebSocket error:', error)
+    }
+
+    ws.onclose = () => {
+      console.log('WebSocket disconnected')
+      // 5秒后尝试重连
+      setTimeout(() => {
+        if (!ws || ws.readyState === WebSocket.CLOSED) {
+          connectWebSocket()
+        }
+      }, 5000)
+    }
+  } catch (error) {
+    console.error('Failed to connect WebSocket:', error)
+  }
+}
+
+// 断开 WebSocket
+const disconnectWebSocket = () => {
+  if (ws) {
+    ws.close()
+    ws = null
+  }
+}
+
 onMounted(() => {
-  // TODO: 连接 WebSocket 并监听消息
-  // const ws = useWebSocket()
-  // ws.addEventListener('message', handleWebSocketMessage)
+  connectWebSocket()
 })
 
 onUnmounted(() => {
-  // TODO: 清理 WebSocket 监听
-  // const ws = useWebSocket()
-  // ws.removeEventListener('message', handleWebSocketMessage)
+  disconnectWebSocket()
 })
 </script>
 

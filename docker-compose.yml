@@ -1,51 +1,57 @@
-version: '3.8'
-
 services:
-  video-sync:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: video-sync:latest
+  # PostgreSQL 数据库容器（独立）
+  postgres:
+    image: postgres:16-alpine
+    container_name: video-sync-postgres-alpine
+    restart: unless-stopped
+
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=wahaha.123
+      - POSTGRES_DB=video_sync
+      - TZ=Asia/Shanghai
+      - PGDATA=/var/lib/postgresql/data/pgdata
+
+    volumes:
+      - postgres_data_alpine:/var/lib/postgresql/data
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d video_sync"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+    networks:
+      - video-sync-network
+
+  # 应用容器（基于 Alpine）
+  app:
+    image: video-sync:v0.0.0.3
     container_name: video-sync
     restart: unless-stopped
 
-    # 环境变量配置
+    depends_on:
+      postgres:
+        condition: service_healthy
+
     environment:
-      # 时区设置
       - TZ=Asia/Shanghai
-
-      # PostgreSQL 数据库配置
-      - POSTGRES_USER=bili_sync
-      - POSTGRES_PASSWORD=your_secure_password_here
-      - POSTGRES_DB=bili_sync
-
-      # 应用配置（可选）
+      - DB_HOST=postgres
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=wahaha.123
+      - POSTGRES_DB=video_sync
       - APP_PORT=8080
 
-    # 端口映射 - 只开放前端端口
     ports:
-      - "8080:80"        # 前端服务端口（映射到本地8080）
-      # PostgreSQL 端口不对外开放
-      # 后端服务端口不对外开放
+      - "8080:80"
 
-    # 数据卷挂载
     volumes:
-      # PostgreSQL 数据持久化
-      - postgres_data:/var/lib/postgresql/data
-
-      # 下载文件存储
       - ./downloads:/downloads
-
-      # 元数据存储
       - ./metadata:/metadata
-
-      # 日志文件
       - ./logs:/var/log/bili-sync
-
-      # 配置文件（可选，用于自定义配置）
       - ./configs:/app/configs
 
-    # 健康检查
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost/api/health"]
       interval: 30s
@@ -53,22 +59,13 @@ services:
       retries: 3
       start_period: 60s
 
-    # 资源限制（可选，根据实际情况调整）
-    # deploy:
-    #   resources:
-    #     limits:
-    #       cpus: '2'
-    #       memory: 4G
-    #     reservations:
-    #       cpus: '1'
-    #       memory: 2G
+    networks:
+      - video-sync-network
 
-# 数据卷定义
+networks:
+  video-sync-network:
+    driver: bridge
+
 volumes:
-  postgres_data:
+  postgres_data_alpine:
     driver: local
-
-# 网络配置（可选）
-# networks:
-#   default:
-#     driver: bridge

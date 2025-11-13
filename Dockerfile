@@ -1,7 +1,8 @@
 # ============================================
-# 多阶段构建 Dockerfile - video-sync 项目（国内镜像优化版）
+# 基于自定义 Alpine 基础镜像的应用容器
 # ============================================
-# 该镜像包含：前端服务、后端服务、PostgreSQL、yt-dlp、ffmpeg
+# 使用预先构建好的 video-sync-alpine-base 基础镜像
+# 这样可以避免每次构建时的网络问题
 # ============================================
 
 # ============================================
@@ -9,21 +10,15 @@
 # ============================================
 FROM node:20-alpine AS frontend-builder
 
-# 使用阿里云 npm 镜像加速
+# 使用国内 npm 镜像
 RUN npm config set registry https://registry.npmmirror.com
 
 WORKDIR /app/web
 
-# 复制前端依赖文件
 COPY web/package*.json ./
-
-# 安装前端依赖（包括开发依赖，构建需要）
 RUN npm ci
 
-# 复制前端源代码
 COPY web/ ./
-
-# 构建前端（直接使用 vite build，跳过类型检查）
 RUN npx vite build
 
 # ============================================
@@ -36,72 +31,24 @@ ENV GOPROXY=https://goproxy.io,direct
 
 WORKDIR /app
 
-# 复制 Go 依赖文件
 COPY go.mod go.sum ./
-
-# 下载 Go 依赖
 RUN go mod download
 
-# 复制后端源代码
 COPY cmd/ ./cmd/
 COPY internal/ ./internal/
 COPY migrations/ ./migrations/
 
-# 构建后端二进制文件
 RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -ldflags="-w -s" -o /app/bili-sync ./cmd/server
 
 # ============================================
-# 阶段 3: 最终镜像
+# 阶段 3: 最终镜像（基于自定义基础镜像）
 # ============================================
-FROM ubuntu:22.04
+FROM video-sync-alpine-base:latest
 
-# 设置环境变量
-ENV DEBIAN_FRONTEND=noninteractive \
-    TZ=Asia/Shanghai \
-    POSTGRES_VERSION=15 \
-    PGDATA=/var/lib/postgresql/data \
-    LANG=zh_CN.UTF-8 \
-    LANGUAGE=zh_CN:zh \
-    LC_ALL=zh_CN.UTF-8
+LABEL maintainer="video-sync"
+LABEL description="video-sync application based on Alpine"
 
-# 使用阿里云 Ubuntu 镜像源加速
-RUN sed -i 's@//.*archive.ubuntu.com@//mirrors.aliyun.com@g' /etc/apt/sources.list && \
-    sed -i 's@//.*security.ubuntu.com@//mirrors.aliyun.com@g' /etc/apt/sources.list
-
-# 添加 PostgreSQL 官方仓库（使用清华镜像）并安装所有依赖
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates \
-    curl \
-    wget \
-    gnupg \
-    lsb-release \
-    && curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | gpg --dearmor -o /usr/share/keyrings/postgresql-keyring.gpg \
-    && echo "deb [signed-by=/usr/share/keyrings/postgresql-keyring.gpg] https://mirrors.tuna.tsinghua.edu.cn/postgresql/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list \
-    && apt-get update \
-    && apt-get install -y --no-install-recommends \
-    # 基础工具
-    supervisor \
-    tzdata \
-    locales \
-    python3 \
-    python3-pip \
-    # FFmpeg
-    ffmpeg \
-    # Nginx
-    nginx \
-    # PostgreSQL
-    postgresql-${POSTGRES_VERSION} \
-    postgresql-contrib-${POSTGRES_VERSION} \
-    && locale-gen zh_CN.UTF-8 \
-    && update-locale LANG=zh_CN.UTF-8 \
-    # 配置 pip 使用清华镜像并安装 yt-dlp
-    && python3 -m pip config set global.index-url https://pypi.tuna.tsinghua.edu.cn/simple \
-    && python3 -m pip install --no-cache-dir -U yt-dlp \
-    # 清理缓存
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
-
-# 创建必要的目录
+# 创建应用目录
 RUN mkdir -p \
     /app/backend \
     /app/frontend \
@@ -109,22 +56,20 @@ RUN mkdir -p \
     /downloads/bilibili \
     /metadata/people \
     /var/log/bili-sync \
-    /var/log/supervisor \
-    /etc/supervisor/conf.d
+    /var/log/supervisor
 
-# 从构建阶段复制后端二进制文件
+# 从构建阶段复制文件
 COPY --from=backend-builder /app/bili-sync /app/backend/
-
-# 从构建阶段复制前端构建产物
 COPY --from=frontend-builder /app/web/dist /app/frontend/
 
 # 复制配置文件
 COPY configs/config.example.yaml /app/configs/config.yaml
 COPY bili-sync-schema.sql /app/
+COPY migrations/ /app/migrations/
 
 # 配置 Nginx
-RUN rm -f /etc/nginx/sites-enabled/default
-COPY <<'EOF' /etc/nginx/sites-available/video-sync
+RUN rm -f /etc/nginx/http.d/default.conf
+COPY <<'EOF' /etc/nginx/http.d/video-sync.conf
 server {
     listen 80;
     server_name _;
@@ -171,31 +116,20 @@ server {
 }
 EOF
 
-RUN ln -s /etc/nginx/sites-available/video-sync /etc/nginx/sites-enabled/
-
 # 配置 Supervisor
-COPY <<'EOF' /etc/supervisor/conf.d/supervisord.conf
+COPY <<'EOF' /etc/supervisor.d/supervisord.ini
 [supervisord]
 nodaemon=true
 user=root
 logfile=/var/log/supervisor/supervisord.log
-pidfile=/var/run/supervisord.pid
-
-[program:postgresql]
-command=/usr/lib/postgresql/15/bin/postgres -D /var/lib/postgresql/data
-user=postgres
-autostart=true
-autorestart=true
-priority=1
-stdout_logfile=/var/log/supervisor/postgresql.log
-stderr_logfile=/var/log/supervisor/postgresql_err.log
+pidfile=/run/supervisord.pid
 
 [program:backend]
 command=/app/backend/bili-sync -config /app/configs/config.yaml
 directory=/app/backend
 autostart=true
 autorestart=true
-priority=2
+priority=1
 stdout_logfile=/var/log/supervisor/backend.log
 stderr_logfile=/var/log/supervisor/backend_err.log
 environment=TZ="Asia/Shanghai"
@@ -204,14 +138,66 @@ environment=TZ="Asia/Shanghai"
 command=/usr/sbin/nginx -g "daemon off;"
 autostart=true
 autorestart=true
-priority=3
+priority=2
 stdout_logfile=/var/log/supervisor/nginx.log
 stderr_logfile=/var/log/supervisor/nginx_err.log
 EOF
 
-# 复制启动脚本并修复换行符
-COPY entrypoint.sh /app/entrypoint.sh
-RUN sed -i 's/\r$//' /app/entrypoint.sh && chmod +x /app/entrypoint.sh
+# 创建启动脚本
+COPY <<'EOF' /app/entrypoint.sh
+#!/bin/bash
+set -e
+
+# 等待 PostgreSQL 准备就绪
+echo "等待 PostgreSQL 启动..."
+until PGPASSWORD=${POSTGRES_PASSWORD:-bili_sync} psql -h ${DB_HOST:-postgres} -U ${POSTGRES_USER:-bili_sync} -d ${POSTGRES_DB:-bili_sync} -c '\q' 2>/dev/null; do
+    echo "PostgreSQL 未就绪，等待..."
+    sleep 2
+done
+echo "PostgreSQL 已就绪"
+
+# 初始化数据库（如果需要）
+echo "检查数据库是否需要初始化..."
+TABLE_COUNT=$(PGPASSWORD=${POSTGRES_PASSWORD:-bili_sync} psql -h ${DB_HOST:-postgres} -U ${POSTGRES_USER:-bili_sync} -d ${POSTGRES_DB:-bili_sync} -tAc "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='public';")
+
+if [ "$TABLE_COUNT" -eq "0" ]; then
+    echo "初始化数据库表..."
+    PGPASSWORD=${POSTGRES_PASSWORD:-bili_sync} psql -h ${DB_HOST:-postgres} -U ${POSTGRES_USER:-bili_sync} -d ${POSTGRES_DB:-bili_sync} -f /app/bili-sync-schema.sql || true
+    echo "数据库初始化完成"
+else
+    echo "数据库已存在表，跳过初始化"
+fi
+
+# 执行数据库迁移（总是执行，使用 IF NOT EXISTS 避免重复）
+echo "执行数据库迁移..."
+if [ -d "/app/migrations" ]; then
+    for migration in /app/migrations/*.sql; do
+        if [ -f "$migration" ]; then
+            echo "执行迁移: $(basename $migration)"
+            PGPASSWORD=${POSTGRES_PASSWORD:-bili_sync} psql -h ${DB_HOST:-postgres} -U ${POSTGRES_USER:-bili_sync} -d ${POSTGRES_DB:-bili_sync} -f "$migration" 2>&1 | grep -v "already exists" || true
+        fi
+    done
+    echo "数据库迁移完成"
+fi
+
+# 更新配置文件中的数据库连接信息
+sed -i "s/host: .*/host: ${DB_HOST:-postgres}/g" /app/configs/config.yaml
+sed -i "s/user: .*/user: ${POSTGRES_USER:-bili_sync}/g" /app/configs/config.yaml
+sed -i "s/password: .*/password: ${POSTGRES_PASSWORD:-bili_sync}/g" /app/configs/config.yaml
+sed -i "s/dbname: .*/dbname: ${POSTGRES_DB:-bili_sync}/g" /app/configs/config.yaml
+sed -i "s/port: .*/port: 5432/g" /app/configs/config.yaml
+
+# 确保目录权限正确
+chmod -R 755 /downloads /metadata /var/log/bili-sync
+
+# 启动 supervisor
+echo "启动所有服务..."
+exec /usr/bin/supervisord -c /etc/supervisord.conf
+EOF
+
+# 修复启动脚本
+RUN chmod +x /app/entrypoint.sh && \
+    sed -i 's/\r$//' /app/entrypoint.sh
 
 # 暴露前端端口
 EXPOSE 80
@@ -220,7 +206,7 @@ EXPOSE 80
 WORKDIR /app
 
 # 创建数据卷
-VOLUME ["/var/lib/postgresql/data", "/downloads", "/metadata", "/var/log/bili-sync", "/app/configs"]
+VOLUME ["/downloads", "/metadata", "/var/log/bili-sync", "/app/configs"]
 
 # 健康检查
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \

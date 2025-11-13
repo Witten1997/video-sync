@@ -142,19 +142,25 @@ func (c *Client) UpdateCredential(credentialCfg *config.CredentialConfig) {
 
 // ValidateCredential 验证认证信息是否有效
 func (c *Client) ValidateCredential() error {
-	// 使用现有的 CheckCredentialValid 方法
-	valid, err := c.CheckCredentialValid()
-	if err != nil {
-		return fmt.Errorf("验证失败: %w", err)
+	// 首先检查凭据是否存在
+	if c.credential == nil || c.credential.SESSDATA == "" {
+		return fmt.Errorf("未配置认证信息")
 	}
 
-	if !valid {
-		return fmt.Errorf("账号未登录或 Cookie 已过期")
-	}
-
-	// 尝试获取用户信息确认登录状态
-	_, err = c.GetMe()
+	// 尝试获取用户信息来验证登录状态（这是最直接的验证方式）
+	_, err := c.GetMe()
 	if err != nil {
+		// 如果获取用户信息失败，再检查凭据有效性
+		valid, checkErr := c.CheckCredentialValid()
+		if checkErr != nil {
+			return fmt.Errorf("验证失败: %w", checkErr)
+		}
+
+		if !valid {
+			return fmt.Errorf("账号未登录或 Cookie 已过期")
+		}
+
+		// 凭据检查通过但获取用户信息失败，可能是网络问题
 		return fmt.Errorf("获取用户信息失败: %w", err)
 	}
 

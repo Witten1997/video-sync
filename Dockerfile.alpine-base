@@ -1,0 +1,150 @@
+# ============================================
+# Alpine 基础镜像 - video-sync-base
+# ============================================
+# 目的：预先安装所有依赖，避免每次构建时网络问题
+# 包含：FFmpeg, Python3, Nginx, PostgreSQL客户端, Supervisor等
+# 所有源都使用国内镜像加速
+# ============================================
+
+FROM alpine:3.19
+
+LABEL maintainer="video-sync"
+LABEL description="Alpine base image with all dependencies for video-sync"
+LABEL version="1.0"
+
+# 设置环境变量
+ENV TZ=Asia/Shanghai \
+    LANG=zh_CN.UTF-8 \
+    LANGUAGE=zh_CN:zh \
+    LC_ALL=zh_CN.UTF-8 \
+    PYTHONUNBUFFERED=1
+
+# ============================================
+# 阶段 1: 配置镜像源（使用国内镜像）
+# ============================================
+RUN echo "==> 配置 Alpine 镜像源..." && \
+    # 备份原始源
+    cp /etc/apk/repositories /etc/apk/repositories.bak && \
+    # 使用阿里云镜像源
+    echo "https://mirrors.aliyun.com/alpine/v3.19/main" > /etc/apk/repositories && \
+    echo "https://mirrors.aliyun.com/alpine/v3.19/community" >> /etc/apk/repositories && \
+    # 如果阿里云失败，自动切换到清华源
+    cat /etc/apk/repositories && \
+    apk update || \
+    (echo "https://mirrors.tuna.tsinghua.edu.cn/alpine/v3.19/main" > /etc/apk/repositories && \
+     echo "https://mirrors.tuna.tsinghua.edu.cn/alpine/v3.19/community" >> /etc/apk/repositories && \
+     apk update) || \
+    # 最后回退到官方源
+    (cp /etc/apk/repositories.bak /etc/apk/repositories && apk update)
+
+# ============================================
+# 阶段 2: 安装基础工具和运行时
+# ============================================
+RUN echo "==> 安装基础工具..." && \
+    apk add --no-cache \
+    # 基础工具
+    bash \
+    curl \
+    wget \
+    ca-certificates \
+    tzdata \
+    # 进程管理
+    supervisor \
+    # 开发工具（如果需要编译）
+    gcc \
+    g++ \
+    make \
+    libc-dev \
+    linux-headers
+
+# ============================================
+# 阶段 3: 安装 Nginx
+# ============================================
+RUN echo "==> 安装 Nginx..." && \
+    apk add --no-cache nginx && \
+    # 创建必要的目录
+    mkdir -p /run/nginx && \
+    # 创建默认配置目录
+    mkdir -p /etc/nginx/http.d /etc/nginx/conf.d
+
+# ============================================
+# 阶段 4: 安装 FFmpeg（视频处理核心）
+# ============================================
+RUN echo "==> 安装 FFmpeg..." && \
+    apk add --no-cache \
+    ffmpeg \
+    ffmpeg-libs \
+    # 常用编解码器
+    x264-libs \
+    x265-libs \
+    # 其他媒体库
+    libvpx \
+    opus \
+    lame
+
+# ============================================
+# 阶段 5: 安装 Python 和 yt-dlp
+# ============================================
+RUN echo "==> 安装 Python..." && \
+    apk add --no-cache \
+    python3 \
+    py3-pip \
+    py3-setuptools \
+    py3-wheel && \
+    # 配置 pip 使用清华源
+    mkdir -p ~/.pip && \
+    echo "[global]" > ~/.pip/pip.conf && \
+    echo "index-url = https://pypi.tuna.tsinghua.edu.cn/simple" >> ~/.pip/pip.conf && \
+    echo "trusted-host = pypi.tuna.tsinghua.edu.cn" >> ~/.pip/pip.conf && \
+    # 安装 yt-dlp（使用国内源）
+    pip3 install --no-cache-dir --break-system-packages \
+        -i https://pypi.tuna.tsinghua.edu.cn/simple \
+        yt-dlp
+
+# ============================================
+# 阶段 6: 安装 PostgreSQL 客户端
+# ============================================
+RUN echo "==> 安装 PostgreSQL 客户端..." && \
+    apk add --no-cache \
+    postgresql16-client
+
+# ============================================
+# 阶段 7: 清理和优化
+# ============================================
+RUN echo "==> 清理缓存..." && \
+    # 清理 apk 缓存
+    rm -rf /var/cache/apk/* && \
+    # 清理 pip 缓存
+    rm -rf ~/.cache/pip && \
+    # 清理临时文件
+    rm -rf /tmp/* /var/tmp/* && \
+    # 设置时区
+    cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && \
+    echo "Asia/Shanghai" > /etc/timezone
+
+# ============================================
+# 验证安装
+# ============================================
+RUN echo "==> 验证安装..." && \
+    echo "Bash: $(bash --version | head -1)" && \
+    echo "Nginx: $(nginx -v 2>&1)" && \
+    echo "FFmpeg: $(ffmpeg -version | head -1)" && \
+    echo "Python: $(python3 --version)" && \
+    echo "yt-dlp: $(yt-dlp --version)" && \
+    echo "PostgreSQL Client: $(psql --version)" && \
+    echo "Supervisor: $(supervisord --version)" && \
+    echo "✅ 所有依赖安装成功！"
+
+# ============================================
+# 元数据
+# ============================================
+LABEL alpine.version="3.19" \
+      ffmpeg.version="$(ffmpeg -version | head -1)" \
+      python.version="$(python3 --version)" \
+      nginx.version="$(nginx -v 2>&1)"
+
+# 设置工作目录
+WORKDIR /app
+
+# 默认命令
+CMD ["/bin/sh"]

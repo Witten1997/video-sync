@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"bili-download/internal/config"
 
@@ -77,9 +78,29 @@ func (s *Server) handleUpdateConfig(c *gin.Context) {
 		s.downloadMgr.UpdateConfig(&newConfig)
 	}
 
+	// 同步更新 scheduler 中的配置引用
+	if s.scheduler != nil {
+		s.scheduler.UpdateConfig(&newConfig)
+	}
+
 	// 如果 B站认证信息发生变化，更新 biliClient 的 credential
 	if credentialChanged {
 		s.biliClient.UpdateCredential(&newConfig.Bilibili.Credential)
+	}
+
+	// 通过 WebSocket 推送配置更新事件
+	if s.websocketHub != nil {
+		// 获取最新的调度器状态
+		schedulerStatus := s.scheduler.GetStatus()
+
+		s.websocketHub.Broadcast(WebSocketMessage{
+			Type: "config_updated",
+			Data: gin.H{
+				"message":          "配置已更新",
+				"scheduler_status": schedulerStatus,
+			},
+			Timestamp: time.Now(),
+		})
 	}
 
 	// 检查哪些配置需要重启服务才能生效
@@ -406,6 +427,13 @@ func (s *Server) handleValidateConfig(c *gin.Context) {
 
 // handleValidateBilibiliCredential 验证B站认证信息
 func (s *Server) handleValidateBilibiliCredential(c *gin.Context) {
+	// 检查 biliClient 是否有凭据
+	credential := s.biliClient.GetCredential()
+	if credential == nil || credential.SESSDATA == "" {
+		respondError(c, 400, "未配置B站认证信息")
+		return
+	}
+
 	// 验证当前配置的B站凭证
 	if err := s.biliClient.ValidateCredential(); err != nil {
 		respondError(c, 400, fmt.Sprintf("认证验证失败: %v", err))

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -710,6 +711,9 @@ func (dm *DownloadManager) UpdateConfig(cfg *config.Config) {
 	dm.mu.Lock()
 	defer dm.mu.Unlock()
 
+	// 保存旧的下载基础路径
+	oldDownloadBase := dm.config.Paths.DownloadBase
+
 	// 更新管理器的配置引用
 	dm.config = cfg
 
@@ -731,7 +735,80 @@ func (dm *DownloadManager) UpdateConfig(cfg *config.Config) {
 		dm.concurrency.UpdateLimits(maxVideos, maxPages)
 	}
 
+	// 如果下载基础路径发生变化，更新队列中所有待处理任务的路径
+	if oldDownloadBase != cfg.Paths.DownloadBase {
+		dm.updateQueuedTaskPaths(oldDownloadBase, cfg.Paths.DownloadBase)
+	}
+
 	utils.Info("下载管理器配置已更新")
+}
+
+// updateQueuedTaskPaths 更新队列中任务的输出路径
+func (dm *DownloadManager) updateQueuedTaskPaths(oldBase, newBase string) {
+	if dm.queue == nil {
+		return
+	}
+
+	// 规范化路径（统一路径分隔符）
+	oldBase = filepath.Clean(oldBase)
+	newBase = filepath.Clean(newBase)
+
+	updatedCount := 0
+	tasks := dm.queue.GetAll()
+
+	for _, task := range tasks {
+		// 只更新待处理或排队中的任务
+		if task.Status == TaskStatusPending || task.Status == TaskStatusQueued {
+			task.mu.Lock()
+
+			oldPath := filepath.Clean(task.OutputDir)
+
+			// 使用 strings.HasPrefix 检查路径前缀，并确保后面跟着路径分隔符或结尾
+			if strings.HasPrefix(oldPath, oldBase) {
+				// 确保匹配的是完整的路径段，而不是部分匹配
+				// 例如：/downloads 应该匹配 /downloads/video，但不应该匹配 /downloads2/video
+				isValidPrefix := false
+				if len(oldPath) == len(oldBase) {
+					// 完全相等
+					isValidPrefix = true
+				} else if len(oldPath) > len(oldBase) {
+					// 检查后面是否是路径分隔符
+					nextChar := oldPath[len(oldBase)]
+					if nextChar == filepath.Separator || nextChar == '/' || nextChar == '\\' {
+						isValidPrefix = true
+					}
+				}
+
+				if isValidPrefix {
+					// 提取相对路径部分
+					relativePath := ""
+					if len(oldPath) > len(oldBase) {
+						relativePath = oldPath[len(oldBase):]
+						// 去掉开头的路径分隔符
+						relativePath = strings.TrimPrefix(relativePath, string(filepath.Separator))
+						relativePath = strings.TrimPrefix(relativePath, "/")
+						relativePath = strings.TrimPrefix(relativePath, "\\")
+					}
+
+					// 构建新路径
+					if relativePath != "" {
+						task.OutputDir = filepath.Join(newBase, relativePath)
+					} else {
+						task.OutputDir = newBase
+					}
+					updatedCount++
+
+					utils.Debug("更新任务 %s 的输出路径: %s -> %s", task.ID, oldPath, task.OutputDir)
+				}
+			}
+
+			task.mu.Unlock()
+		}
+	}
+
+	if updatedCount > 0 {
+		utils.Info("已更新 %d 个待处理任务的下载路径", updatedCount)
+	}
 }
 
 // GetDownloader 获取下载器实例

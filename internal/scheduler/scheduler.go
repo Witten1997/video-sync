@@ -260,6 +260,50 @@ func (s *Scheduler) Stop() error {
 	return nil
 }
 
+// UpdateConfig 更新配置
+func (s *Scheduler) UpdateConfig(cfg *config.Config) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	oldInterval := s.config.Sync.Interval
+	s.config = cfg
+
+	// 如果调度器正在运行且同步间隔发生变化，需要重启调度循环
+	if s.running && oldInterval != cfg.Sync.Interval {
+		utils.Info("同步间隔已从 %d 秒更改为 %d 秒，正在重启调度器...", oldInterval, cfg.Sync.Interval)
+
+		// 取消旧的上下文以停止调度循环
+		if s.cancelFunc != nil {
+			s.cancelFunc()
+		}
+
+		// 停止旧的ticker
+		if s.ticker != nil {
+			s.ticker.Stop()
+		}
+
+		// 创建新的上下文
+		ctx, cancel := context.WithCancel(context.Background())
+		s.ctx = ctx
+		s.cancelFunc = cancel
+
+		// 创建新的ticker
+		interval := time.Duration(cfg.Sync.Interval) * time.Second
+		s.ticker = time.NewTicker(interval)
+
+		// 更新下次运行时间
+		nextRun := time.Now().Add(interval)
+		s.nextRunAt = &nextRun
+
+		// 启动新的调度循环
+		go s.runScheduleLoop()
+
+		utils.Info("调度器已重启，新的同步间隔: %d 秒，下次运行时间: %v", cfg.Sync.Interval, nextRun)
+	}
+
+	utils.Info("调度器配置已更新")
+}
+
 // TriggerManual 手动触发一次同步
 func (s *Scheduler) TriggerManual() (string, error) {
 	utils.Info("[TriggerManual] 方法被调用")
