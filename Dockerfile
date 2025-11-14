@@ -150,7 +150,7 @@ set -e
 
 # 等待 PostgreSQL 准备就绪
 echo "等待 PostgreSQL 启动..."
-until PGPASSWORD=${POSTGRES_PASSWORD:-bili_sync} psql -h ${DB_HOST:-postgres} -U ${POSTGRES_USER:-bili_sync} -d ${POSTGRES_DB:-bili_sync} -c '\q' 2>/dev/null; do
+until PGPASSWORD=${POSTGRES_PASSWORD:-video_sync} psql -h ${DB_HOST:-postgres} -p ${DB_PORT:-5432} -U ${POSTGRES_USER:-video_sync} -d ${POSTGRES_DB:-video_sync} -c '\q' 2>/dev/null; do
     echo "PostgreSQL 未就绪，等待..."
     sleep 2
 done
@@ -158,11 +158,11 @@ echo "PostgreSQL 已就绪"
 
 # 初始化数据库（如果需要）
 echo "检查数据库是否需要初始化..."
-TABLE_COUNT=$(PGPASSWORD=${POSTGRES_PASSWORD:-bili_sync} psql -h ${DB_HOST:-postgres} -U ${POSTGRES_USER:-bili_sync} -d ${POSTGRES_DB:-bili_sync} -tAc "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='public';")
+TABLE_COUNT=$(PGPASSWORD=${POSTGRES_PASSWORD:-video_sync} psql -h ${DB_HOST:-postgres} -p ${DB_PORT:-5432} -U ${POSTGRES_USER:-video_sync} -d ${POSTGRES_DB:-video_sync} -tAc "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema='public';")
 
 if [ "$TABLE_COUNT" -eq "0" ]; then
     echo "初始化数据库表..."
-    PGPASSWORD=${POSTGRES_PASSWORD:-bili_sync} psql -h ${DB_HOST:-postgres} -U ${POSTGRES_USER:-bili_sync} -d ${POSTGRES_DB:-bili_sync} -f /app/bili-sync-schema.sql || true
+    PGPASSWORD=${POSTGRES_PASSWORD:-video_sync} psql -h ${DB_HOST:-postgres} -p ${DB_PORT:-5432} -U ${POSTGRES_USER:-video_sync} -d ${POSTGRES_DB:-video_sync} -f /app/bili-sync-schema.sql || true
     echo "数据库初始化完成"
 else
     echo "数据库已存在表，跳过初始化"
@@ -174,7 +174,7 @@ if [ -d "/app/migrations" ]; then
     for migration in /app/migrations/*.sql; do
         if [ -f "$migration" ]; then
             echo "执行迁移: $(basename $migration)"
-            PGPASSWORD=${POSTGRES_PASSWORD:-bili_sync} psql -h ${DB_HOST:-postgres} -U ${POSTGRES_USER:-bili_sync} -d ${POSTGRES_DB:-bili_sync} -f "$migration" 2>&1 | grep -v "already exists" || true
+            PGPASSWORD=${POSTGRES_PASSWORD:-video_sync} psql -h ${DB_HOST:-postgres} -p ${DB_PORT:-5432} -U ${POSTGRES_USER:-video_sync} -d ${POSTGRES_DB:-video_sync} -f "$migration" 2>&1 | grep -v "already exists" || true
         fi
     done
     echo "数据库迁移完成"
@@ -182,10 +182,10 @@ fi
 
 # 更新配置文件中的数据库连接信息
 sed -i "s/host: .*/host: ${DB_HOST:-postgres}/g" /app/configs/config.yaml
-sed -i "s/user: .*/user: ${POSTGRES_USER:-bili_sync}/g" /app/configs/config.yaml
-sed -i "s/password: .*/password: ${POSTGRES_PASSWORD:-bili_sync}/g" /app/configs/config.yaml
-sed -i "s/dbname: .*/dbname: ${POSTGRES_DB:-bili_sync}/g" /app/configs/config.yaml
-sed -i "s/port: .*/port: 5432/g" /app/configs/config.yaml
+sed -i "s/user: .*/user: ${POSTGRES_USER:-video_sync}/g" /app/configs/config.yaml
+sed -i "s/password: .*/password: ${POSTGRES_PASSWORD:-video_sync}/g" /app/configs/config.yaml
+sed -i "s/dbname: .*/dbname: ${POSTGRES_DB:-video_sync}/g" /app/configs/config.yaml
+sed -i "s/port: .*/port: ${DB_PORT:-5432}/g" /app/configs/config.yaml
 
 # 确保目录权限正确
 chmod -R 755 /downloads /metadata /var/log/bili-sync
