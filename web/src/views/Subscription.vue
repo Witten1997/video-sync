@@ -327,8 +327,8 @@ import {
 const activeTab = ref('favorites')
 
 // 视图模式
-const favoriteViewMode = ref('list')
-const followingViewMode = ref('list')
+const favoriteViewMode = ref('grid')
+const followingViewMode = ref('grid')
 
 // 收藏夹相关
 const favorites = ref<FavoriteFolder[]>([])

@@ -93,6 +93,11 @@ func (s *Server) handleListVideos(c *gin.Context) {
 	//	s.resolveVideoCoverPaths(&videos[i])
 	//}
 
+	// 将所有视频的绝对路径转换为相对路径
+	for i := range videos {
+		s.convertVideoPathToRelative(&videos[i])
+	}
+
 	respondSuccess(c, gin.H{
 		"total":       total,
 		"page":        page,
@@ -119,6 +124,9 @@ func (s *Server) handleGetVideo(c *gin.Context) {
 
 	// 处理封面路径，优先使用本地封面
 	s.resolveVideoCoverPaths(&video)
+
+	// 将绝对路径转换为相对路径（用于前端播放）
+	s.convertVideoPathToRelative(&video)
 
 	respondSuccess(c, video)
 }
@@ -579,5 +587,25 @@ func (s *Server) handleImageProxy(c *gin.Context) {
 	_, err = io.Copy(c.Writer, resp.Body)
 	if err != nil {
 		utils.Error("复制图片内容失败: %v", err)
+	}
+}
+
+// convertVideoPathToRelative 将视频的绝对路径转换为相对路径（相对于 download_base）
+func (s *Server) convertVideoPathToRelative(video *models.Video) {
+	downloadBase := s.config.Paths.DownloadBase
+	if downloadBase == "" || video.Path == "" {
+		return
+	}
+
+	// 标准化路径分隔符
+	videoPath := filepath.Clean(video.Path)
+	downloadBase = filepath.Clean(downloadBase)
+
+	// 计算相对路径
+	relPath, err := filepath.Rel(downloadBase, videoPath)
+	if err == nil {
+		// 将Windows路径分隔符转换为URL路径分隔符
+		relPath = filepath.ToSlash(relPath)
+		video.Path = relPath
 	}
 }

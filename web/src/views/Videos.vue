@@ -139,8 +139,18 @@
           {{ formatTime(row.pubtime) }}
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="200" fixed="right">
+      <el-table-column label="操作" width="280" fixed="right">
         <template #default="{ row }">
+          <el-button
+            v-if="isDownloadComplete(row.download_status) && row.valid"
+            text
+            type="success"
+            size="small"
+            @click="handlePlay(row)"
+          >
+            <el-icon><VideoPlay /></el-icon>
+            播放
+          </el-button>
           <el-button text type="primary" size="small" @click="handleViewDetail(row)">
             <el-icon><View /></el-icon>
             详情
@@ -161,20 +171,32 @@
     <div v-else class="grid-view" v-loading="loading">
       <div v-for="item in videos" :key="item.id" class="grid-item">
         <el-card :body-style="{ padding: '0px' }" shadow="hover">
-          <el-image
-            :src="getProxiedImageUrl(item.cover)"
-            fit="cover"
-            class="grid-cover"
-            lazy
-            @click="handleViewDetail(item)"
-            style="cursor: pointer"
-          >
-            <template #error>
-              <div class="image-slot-grid">
-                <el-icon><Picture /></el-icon>
-              </div>
-            </template>
-          </el-image>
+          <div class="grid-cover-wrapper">
+            <el-image
+              :src="getProxiedImageUrl(item.cover)"
+              fit="cover"
+              class="grid-cover"
+              lazy
+              @click="handleViewDetail(item)"
+              style="cursor: pointer"
+            >
+              <template #error>
+                <div class="image-slot-grid">
+                  <el-icon><Picture /></el-icon>
+                </div>
+              </template>
+            </el-image>
+            <!-- 播放按钮悬浮层 -->
+            <div
+              v-if="isDownloadComplete(item.download_status) && item.valid"
+              class="play-overlay"
+              @click="handlePlay(item)"
+            >
+              <el-icon :size="48" class="play-icon">
+                <VideoPlay />
+              </el-icon>
+            </div>
+          </div>
           <div class="grid-content">
             <div class="grid-title" :title="item.name" @click="handleViewDetail(item)">
               {{ item.name }}
@@ -225,6 +247,12 @@
         @current-change="handlePageChange"
       />
     </div>
+
+    <!-- 视频播放器 -->
+    <VideoPlayer
+      v-model:visible="playerVisible"
+      :video="currentPlayingVideo"
+    />
   </div>
 </template>
 
@@ -232,11 +260,12 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Search, Link, List, Grid } from '@element-plus/icons-vue'
-import { getVideos, deleteVideo, redownloadVideo, downloadVideoByURL } from '@/api/video'
+import { Search, Link, List, Grid, VideoPlay, View, Download, Delete, Refresh, Picture } from '@element-plus/icons-vue'
+import { getVideos, deleteVideo, redownloadVideo, downloadVideoByURL, getVideoPages } from '@/api/video'
 import { getProxiedImageUrl } from '@/utils/image'
 import type { Video } from '@/types'
 import dayjs from 'dayjs'
+import VideoPlayer from '@/components/VideoPlayer.vue'
 
 defineOptions({
   name: 'Videos'
@@ -250,7 +279,7 @@ const filterSourceType = ref('')
 const currentPage = ref(1)
 const pageSize = ref(20)
 const total = ref(0)
-const viewMode = ref<'list' | 'grid'>('list')
+const viewMode = ref<'list' | 'grid'>('grid')
 
 // URL下载对话框
 const downloadDialogVisible = ref(false)
@@ -258,6 +287,10 @@ const downloadLoading = ref(false)
 const downloadForm = ref({
   url: ''
 })
+
+// 播放器相关
+const playerVisible = ref(false)
+const currentPlayingVideo = ref<Video | null>(null)
 
 // 显示下载对话框
 const showDownloadDialog = () => {
@@ -332,6 +365,29 @@ const handleSizeChange = () => {
 // 查看详情
 const handleViewDetail = (row: Video) => {
   router.push(`/videos/${row.id}`)
+}
+
+// 播放视频
+const handlePlay = async (row: Video) => {
+  // 检查视频是否已下载完成
+  if (!isDownloadComplete(row.download_status) || !row.valid) {
+    ElMessage.warning('该视频尚未下载完成，无法播放')
+    return
+  }
+
+  try {
+    // 如果是多P视频，需要加载分P列表
+    if (!row.single_page) {
+      const pages = await getVideoPages(row.id)
+      row.pages = pages
+    }
+
+    currentPlayingVideo.value = row
+    playerVisible.value = true
+  } catch (error) {
+    console.error('加载视频信息失败:', error)
+    ElMessage.error('加载视频信息失败')
+  }
 }
 
 // 重新下载
@@ -442,11 +498,51 @@ onMounted(() => {
   height: 100%;
 }
 
+.grid-cover-wrapper {
+  position: relative;
+  overflow: hidden;
+}
+
 .grid-cover {
   width: 100%;
   height: 160px;
   object-fit: cover;
   display: block;
+  transition: transform 0.3s ease;
+}
+
+.grid-cover-wrapper:hover .grid-cover {
+  transform: scale(1.05);
+}
+
+.play-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.4);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  cursor: pointer;
+  z-index: 1;
+}
+
+.grid-cover-wrapper:hover .play-overlay {
+  opacity: 1;
+}
+
+.play-icon {
+  color: #fff;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5));
+  transition: transform 0.2s ease;
+}
+
+.play-overlay:hover .play-icon {
+  transform: scale(1.1);
 }
 
 .image-slot-grid {

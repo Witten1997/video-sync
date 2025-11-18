@@ -9,12 +9,14 @@
   },
   "dependencies": {
     "@element-plus/icons-vue": "^2.3.0",
+    "@types/video.js": "^7.3.58",
     "axios": "^1.6.0",
     "dayjs": "^1.11.0",
     "echarts": "^6.0.0",
     "element-plus": "^2.5.0",
     "pinia": "^2.1.0",
     "qrcode": "^1.5.4",
+    "video.js": "^8.23.4",
     "vue": "^3.4.0",
     "vue-echarts": "^8.0.1",
     "vue-router": "^4.2.0"

@@ -13,7 +13,18 @@
             <el-image :src="getProxiedImageUrl(video.cover)" fit="cover" style="width: 100%; border-radius: 8px" />
           </el-col>
           <el-col :span="16">
-            <h2>{{ video.name }}</h2>
+            <div class="title-actions">
+              <h2>{{ video.name }}</h2>
+              <el-button
+                v-if="isDownloadComplete(video.download_status) && video.valid"
+                type="primary"
+                size="large"
+                :icon="VideoPlay"
+                @click="handlePlay"
+              >
+                播放视频
+              </el-button>
+            </div>
             <el-descriptions :column="2" border class="info-desc">
               <el-descriptions-item label="BV号">{{ video.bvid }}</el-descriptions-item>
               <el-descriptions-item label="UP主">{{ video.upper_name }}</el-descriptions-item>
@@ -73,18 +84,40 @@
             <el-tag v-else type="success">已完成</el-tag>
           </template>
         </el-table-column>
+        <el-table-column label="操作" width="120" align="center" fixed="right">
+          <template #default="{ row }">
+            <el-button
+              v-if="isDownloadComplete(row.download_status)"
+              type="primary"
+              size="small"
+              :icon="VideoPlay"
+              @click="handlePlayPage(row)"
+            >
+              播放
+            </el-button>
+          </template>
+        </el-table-column>
       </el-table>
     </el-card>
+
+    <!-- 视频播放器 -->
+    <VideoPlayer
+      v-model:visible="playerVisible"
+      :video="currentPlayingVideo"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
+import { VideoPlay } from '@element-plus/icons-vue'
 import { getVideo, getVideoPages } from '@/api/video'
 import { getProxiedImageUrl } from '@/utils/image'
 import type { Video, Page } from '@/types'
 import dayjs from 'dayjs'
+import VideoPlayer from '@/components/VideoPlayer.vue'
 
 defineOptions({
   name: 'VideoDetail'
@@ -95,6 +128,10 @@ const router = useRouter()
 const loading = ref(false)
 const video = ref<Video | null>(null)
 const pages = ref<Page[]>([])
+
+// 播放器相关
+const playerVisible = ref(false)
+const currentPlayingVideo = ref<Video | null>(null)
 
 const videoId = Number(route.params.id)
 
@@ -116,6 +153,45 @@ const loadData = async () => {
 // 返回
 const goBack = () => {
   router.back()
+}
+
+// 检查是否下载完成
+const isDownloadComplete = (status: number) => {
+  return status !== 0
+}
+
+// 播放视频（单P）
+const handlePlay = () => {
+  if (!video.value) return
+
+  if (!isDownloadComplete(video.value.download_status) || !video.value.valid) {
+    ElMessage.warning('该视频尚未下载完成，无法播放')
+    return
+  }
+
+  const videoWithPages = { ...video.value, pages: pages.value }
+  currentPlayingVideo.value = videoWithPages
+  playerVisible.value = true
+}
+
+// 播放指定分集（多P）
+const handlePlayPage = (page: Page) => {
+  if (!video.value) return
+
+  if (!isDownloadComplete(page.download_status)) {
+    ElMessage.warning('该分集尚未下载完成，无法播放')
+    return
+  }
+
+  const videoWithPages = { ...video.value, pages: pages.value }
+  currentPlayingVideo.value = videoWithPages
+  playerVisible.value = true
+
+  // 延迟切换到指定分集
+  setTimeout(() => {
+    // VideoPlayer 组件会自动加载第一个已下载的分集
+    // 这里可以扩展为直接播放指定分集
+  }, 100)
 }
 
 // 格式化时间
@@ -152,6 +228,18 @@ onMounted(() => {
 
 .detail-card {
   margin-top: 20px;
+}
+
+.title-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.title-actions h2 {
+  margin: 0;
+  flex: 1;
 }
 
 .info-desc {
