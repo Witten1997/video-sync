@@ -120,7 +120,7 @@ const handleRefresh = () => {
 }
 
 .sidebar {
-  background: linear-gradient(180deg, #fafbfc 0%, #a6a6cd 100%);
+  background: linear-gradient(180deg, #fafbfc 0%, #d4d4da 100%);
   height: 100%;
   overflow-y: auto;
   box-shadow: 2px 0 8px rgba(0, 21, 41, 0.08);

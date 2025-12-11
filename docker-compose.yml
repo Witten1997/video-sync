@@ -27,7 +27,7 @@ services:
 
   # 应用容器（基于 Alpine）
   app:
-    image: video-sync:v0.0.0.3
+    image: video-sync:v0.0.0.4
     container_name: video-sync
     restart: unless-stopped
 

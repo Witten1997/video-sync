@@ -43,7 +43,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -ldflags="-w -s" -o 
 # ============================================
 # 阶段 3: 最终镜像（基于自定义基础镜像）
 # ============================================
-FROM video-sync-alpine-base:latest
+FROM video-sync-alpine-base:v0.0.2
 
 LABEL maintainer="video-sync"
 LABEL description="video-sync application based on Alpine"

@@ -19,6 +19,8 @@ go.work
 build/
 dist/
 
+/CLAUDE.md
+
 # Config files (except example)
 configs/config.yaml
 configs/*.yaml
@@ -88,3 +90,4 @@ coverage.txt
 # Scripts
 scripts/*.sh
 !scripts/example.sh
+/CLAUDE.md

@@ -42,20 +42,12 @@ RUN echo "==> 配置 Alpine 镜像源..." && \
 # ============================================
 RUN echo "==> 安装基础工具..." && \
     apk add --no-cache \
-    # 基础工具
     bash \
     curl \
     wget \
     ca-certificates \
     tzdata \
-    # 进程管理
-    supervisor \
-    # 开发工具（如果需要编译）
-    gcc \
-    g++ \
-    make \
-    libc-dev \
-    linux-headers
+    supervisor
 
 # ============================================
 # 阶段 3: 安装 Nginx
