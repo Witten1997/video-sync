@@ -94,6 +94,13 @@ func main() {
 		log.Fatalf("创建 HTTP 服务器失败: %v", err)
 	}
 
+	// 自动启动调度器
+	if err := server.StartScheduler(); err != nil {
+		utils.Warn("自动启动调度器失败: %v", err)
+	} else {
+		utils.Info("调度器已自动启动")
+	}
+
 	go func() {
 		if err := server.Start(); err != nil {
 			utils.Error("启动 HTTP 服务器失败: %v", err)

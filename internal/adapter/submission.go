@@ -226,7 +226,7 @@ func (a *SubmissionAdapter) matchFilter(video bilibili.SubmissionVideo, opts *Sc
 func (a *SubmissionAdapter) convertToVideoInfo(video bilibili.SubmissionVideo) VideoInfo {
 	duration := parseDuration(video.Length)
 
-	return VideoInfo{
+	videoInfo := VideoInfo{
 		BVid:        video.BVid,
 		Aid:         video.Aid,
 		Title:       video.Title,
@@ -248,6 +248,23 @@ func (a *SubmissionAdapter) convertToVideoInfo(video bilibili.SubmissionVideo) V
 		SourceID:   a.config.Mid,
 		AddTime:    time.Unix(video.Created, 0),
 	}
+
+	// 获取视频详情以获取Pages信息
+	if detail, err := a.client.GetVideoDetail(video.BVid); err == nil {
+		// 转换Pages信息
+		pages := make([]PageInfo, 0, len(detail.Pages))
+		for _, p := range detail.Pages {
+			pages = append(pages, PageInfo{
+				CID:      p.CID,
+				Page:     p.Page,
+				Part:     p.Part,
+				Duration: p.Duration,
+			})
+		}
+		videoInfo.Pages = pages
+	}
+
+	return videoInfo
 }
 
 // parseDuration 解析时长字符串（MM:SS 或 HH:MM:SS）为秒数

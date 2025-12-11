@@ -247,6 +247,15 @@ func (s *Server) Start() error {
 func (s *Server) Shutdown(ctx context.Context) error {
 	utils.Info("正在关闭 HTTP 服务器...")
 
+	// 停止调度器
+	if s.scheduler != nil {
+		if err := s.scheduler.Stop(); err != nil {
+			utils.Warn("停止调度器失败: %v", err)
+		} else {
+			utils.Info("调度器已停止")
+		}
+	}
+
 	// 注意：下载管理器的停止由 main.go 中的 defer 处理
 	// 这里不再重复停止
 
@@ -262,6 +271,22 @@ func (s *Server) Shutdown(ctx context.Context) error {
 
 	utils.Info("HTTP 服务器已关闭")
 	return nil
+}
+
+// StartScheduler 启动调度器
+func (s *Server) StartScheduler() error {
+	if s.scheduler == nil {
+		return fmt.Errorf("调度器未初始化")
+	}
+	return s.scheduler.Start()
+}
+
+// StopScheduler 停止调度器
+func (s *Server) StopScheduler() error {
+	if s.scheduler == nil {
+		return fmt.Errorf("调度器未初始化")
+	}
+	return s.scheduler.Stop()
 }
 
 // loggerMiddleware 日志中间件

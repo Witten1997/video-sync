@@ -462,15 +462,25 @@ func (dm *DownloadManager) PrepareAndAddVideoTask(video *models.Video, baseDir s
 		outputDir = baseDir
 	}
 
+	// 从数据库重新加载完整的视频数据（包括Pages）
+	var videoWithPages models.Video
+	if dm.db != nil {
+		if err := dm.db.Preload("Pages").First(&videoWithPages, video.ID).Error; err != nil {
+			return nil, fmt.Errorf("加载视频数据失败: %w", err)
+		}
+	} else {
+		videoWithPages = *video
+	}
+
 	// 创建下载任务
-	task := NewDownloadTask(TaskTypeVideo, video, nil, outputDir)
+	task := NewDownloadTask(TaskTypeVideo, &videoWithPages, nil, outputDir)
 	task.Priority = priority
 
 	if err := dm.AddTask(task); err != nil {
 		return nil, err
 	}
 
-	utils.Info("已为视频 [%s] 创建下载任务，输出目录: %s", video.Name, outputDir)
+	utils.Info("已为视频 [%s] 创建下载任务，输出目录: %s，Pages数量: %d", videoWithPages.Name, outputDir, len(videoWithPages.Pages))
 	utils.Debug("视频Path字段已更新为: %s", video.Path)
 	return task, nil
 }

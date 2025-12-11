@@ -91,3 +91,5 @@ coverage.txt
 scripts/*.sh
 !scripts/example.sh
 /CLAUDE.md
+
+/docs/node_modules

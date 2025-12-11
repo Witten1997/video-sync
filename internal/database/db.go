@@ -128,6 +128,11 @@ func isConstraintNotExistsError(err error) bool {
 func manualMigrations(db *gorm.DB) error {
 	// 检查 video 表是否存在
 	if db.Migrator().HasTable(&models.Video{}) {
+		// 删除 bvid 的唯一约束，允许同一视频在不同视频源中存在
+		if err := db.Exec(`ALTER TABLE video DROP CONSTRAINT IF EXISTS video_bvid_key`).Error; err != nil {
+			return fmt.Errorf("删除 video_bvid_key 约束失败: %w", err)
+		}
+
 		// 检查 tags 字段的类型
 		var dataType string
 		err := db.Raw(`

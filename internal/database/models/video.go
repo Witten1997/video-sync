@@ -9,7 +9,7 @@ import (
 // Video 视频模型
 type Video struct {
 	ID             uint           `gorm:"primaryKey" json:"id"`
-	BVid           string         `gorm:"column:bvid;uniqueIndex;size:20;not null" json:"bvid"`
+	BVid           string         `gorm:"column:bvid;index;size:20;not null" json:"bvid"`
 	Name           string         `gorm:"size:255;not null" json:"name"`
 	Intro          string         `gorm:"type:text" json:"intro"`
 	Cover          string         `gorm:"size:500" json:"cover"`

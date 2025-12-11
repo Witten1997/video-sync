@@ -324,50 +324,77 @@ func (st *SyncTask) scanVideoSource(source VideoSourceInfo) (*models.VideoSource
 
 // processVideos 处理视频列表
 func (st *SyncTask) processVideos(videos []adapter.VideoInfo, source VideoSourceInfo) (newCount, queuedCount int, err error) {
+	// 获取视频源的数据库ID
+	sourceDBID := st.getSourceDBID(source)
+	if sourceDBID == 0 {
+		return 0, 0, fmt.Errorf("无法获取视频源数据库ID: %s", source.ID)
+	}
+
 	for _, video := range videos {
-		// 检查视频是否已存在
+		// 检查视频是否已存在于当前视频源
 		var existingVideo models.Video
-		result := st.db.Where("bvid = ?", video.BVid).First(&existingVideo)
+		query := st.db.Where("bvid = ?", video.BVid)
+
+		// 根据视频源类型添加关联条件
+		switch source.Type {
+		case "favorite":
+			query = query.Where("favorite_id = ?", sourceDBID)
+		case "submission":
+			query = query.Where("submission_id = ?", sourceDBID)
+		case "collection":
+			query = query.Where("collection_id = ?", sourceDBID)
+		case "watch_later":
+			query = query.Where("watch_later_id = ?", sourceDBID)
+		}
+
+		result := query.First(&existingVideo)
 
 		if result.Error == gorm.ErrRecordNotFound {
-			// 新视频
-			newCount++
+			// 当前视频源中不存在此视频
+			utils.Info("[%s] 发现新视频: %s (BV%s)", st.ID, video.Title, video.BVid)
 
 			// 判断是否应该下载
-			if st.shouldDownloadVideo(&video) {
-				// 创建视频记录
-				newVideo := st.createVideoModel(video, source)
-
-				// 使用 FullSaveAssociations 确保 Pages 也被保存
-				if err := st.db.Session(&gorm.Session{FullSaveAssociations: true}).Create(&newVideo).Error; err != nil {
-					utils.Error("[%s] 创建视频记录失败: %s - %v", st.ID, video.Title, err)
-					continue
-				}
-
-				// 重新从数据库加载视频和它的Pages，确保关联数据完整
-				var videoWithPages models.Video
-				if err := st.db.Preload("Pages").First(&videoWithPages, newVideo.ID).Error; err != nil {
-					utils.Error("[%s] 加载视频Pages失败: %s - %v", st.ID, video.Title, err)
-					continue
-				}
-
-				// 创建下载任务
-				// 构建完整的基础目录：下载基础路径 + 视频源相对路径
-				baseDir := filepath.Join(st.config.Paths.DownloadBase, source.Path)
-				if err := st.createDownloadTask(&videoWithPages, baseDir); err != nil {
-					utils.Error("[%s] 创建下载任务失败: %s - %v", st.ID, video.Title, err)
-					continue
-				}
-
-				queuedCount++
-			} else {
+			if !st.shouldDownloadVideo(&video) {
 				utils.Debug("[%s] 视频被过滤: %s", st.ID, video.Title)
 				st.VideosFiltered++
+				continue
 			}
+
+			// 创建视频记录
+			newVideo := st.createVideoModel(video, source)
+			utils.Debug("[%s] 创建视频模型: %s, Pages: %d", st.ID, newVideo.Name, len(newVideo.Pages))
+
+			// 使用 FullSaveAssociations 确保 Pages 也被保存
+			if err := st.db.Session(&gorm.Session{FullSaveAssociations: true}).Create(&newVideo).Error; err != nil {
+				utils.Error("[%s] 创建视频记录失败: %s - %v", st.ID, video.Title, err)
+				continue
+			}
+			utils.Info("[%s] 视频记录创建成功: %s (ID: %d)", st.ID, newVideo.Name, newVideo.ID)
+			newCount++
+
+			// 重新从数据库加载视频和它的Pages，确保关联数据完整
+			var videoWithPages models.Video
+			if err := st.db.Preload("Pages").First(&videoWithPages, newVideo.ID).Error; err != nil {
+				utils.Error("[%s] 加载视频Pages失败: %s - %v", st.ID, video.Title, err)
+				continue
+			}
+			utils.Debug("[%s] 加载视频完整数据: %s, Pages: %d", st.ID, videoWithPages.Name, len(videoWithPages.Pages))
+
+			// 创建下载任务
+			// 构建完整的基础目录：下载基础路径 + 视频源相对路径
+			baseDir := filepath.Join(st.config.Paths.DownloadBase, source.Path)
+			utils.Debug("[%s] 下载基础目录: %s", st.ID, baseDir)
+
+			if err := st.createDownloadTask(&videoWithPages, baseDir); err != nil {
+				utils.Error("[%s] 创建下载任务失败: %s - %v", st.ID, video.Title, err)
+				continue
+			}
+
+			queuedCount++
 		} else if result.Error != nil {
 			utils.Error("[%s] 查询视频失败: %s - %v", st.ID, video.BVid, result.Error)
 		}
-		// 视频已存在，跳过
+		// 视频已存在于当前视频源，跳过
 	}
 
 	return newCount, queuedCount, nil
@@ -466,6 +493,36 @@ func extractIDFromSourceID(sourceID string) string {
 		return parts[1]
 	}
 	return sourceID
+}
+
+// getSourceDBID 获取视频源在数据库中的主键ID
+func (st *SyncTask) getSourceDBID(source VideoSourceInfo) uint {
+	numericID := extractIDFromSourceID(source.ID)
+
+	switch source.Type {
+	case "favorite":
+		var fav models.Favorite
+		if err := st.db.Where("f_id = ?", numericID).First(&fav).Error; err == nil {
+			return fav.ID
+		}
+	case "submission":
+		var sub models.Submission
+		if err := st.db.Where("upper_id = ?", numericID).First(&sub).Error; err == nil {
+			return sub.ID
+		}
+	case "collection":
+		var col models.Collection
+		if err := st.db.Where("c_id = ?", numericID).First(&col).Error; err == nil {
+			return col.ID
+		}
+	case "watch_later":
+		var wl models.WatchLater
+		if err := st.db.First(&wl).Error; err == nil {
+			return wl.ID
+		}
+	}
+
+	return 0
 }
 
 // createDownloadTask 创建下载任务
