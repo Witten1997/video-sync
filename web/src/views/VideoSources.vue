@@ -9,6 +9,22 @@
         <el-icon><Refresh /></el-icon>
         刷新
       </el-button>
+      <el-button
+        v-if="selectedSources.length > 0"
+        type="primary"
+        @click="handleBatchScan"
+      >
+        <el-icon><Search /></el-icon>
+        批量扫描 ({{ selectedSources.length }})
+      </el-button>
+      <el-button
+        v-if="selectedSources.length > 0"
+        type="danger"
+        @click="handleBatchDelete"
+      >
+        <el-icon><Delete /></el-icon>
+        批量删除 ({{ selectedSources.length }})
+      </el-button>
     </div>
 
     <!-- 筛选条件 -->
@@ -62,7 +78,9 @@
       border
       stripe
       style="width: 100%"
+      @selection-change="handleSelectionChange"
     >
+      <el-table-column type="selection" width="55" align="center" />
       <el-table-column prop="id" label="ID" width="80" />
       <el-table-column label="源ID" width="150">
         <template #default="{ row }">
@@ -220,6 +238,7 @@ const videoSources = ref<VideoSource[]>([])
 const dialogVisible = ref(false)
 const isEdit = ref(false)
 const formRef = ref<FormInstance>()
+const selectedSources = ref<VideoSource[]>([])
 
 // 筛选条件
 const filters = ref({
@@ -426,6 +445,74 @@ const getSourceId = (row: VideoSource) => {
 // 格式化时间
 const formatTime = (time: string) => {
   return dayjs(time).format('YYYY-MM-DD HH:mm:ss')
+}
+
+// 处理选择变化
+const handleSelectionChange = (selection: VideoSource[]) => {
+  selectedSources.value = selection
+}
+
+// 批量扫描
+const handleBatchScan = async () => {
+  try {
+    await ElMessageBox.confirm(
+      `确定要扫描选中的 ${selectedSources.value.length} 个视频源吗？`,
+      '提示',
+      {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        type: 'info'
+      }
+    )
+
+    let successCount = 0
+    for (const source of selectedSources.value) {
+      try {
+        await scanVideoSource(source.id, source.type)
+        successCount++
+      } catch (error) {
+        console.error(`扫描视频源 ${source.name} 失败:`, error)
+      }
+    }
+    ElMessage.success(`已启动 ${successCount} 个扫描任务`)
+    selectedSources.value = []
+  } catch (error) {
+    if (error !== 'cancel') {
+      console.error('批量扫描失败:', error)
+    }
+  }
+}
+
+// 批量删除
+const handleBatchDelete = async () => {
+  try {
+    await ElMessageBox.confirm(
+      `确定要删除选中的 ${selectedSources.value.length} 个视频源吗？`,
+      '提示',
+      {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    )
+
+    let successCount = 0
+    for (const source of selectedSources.value) {
+      try {
+        await deleteVideoSource(source.id, source.type)
+        successCount++
+      } catch (error) {
+        console.error(`删除视频源 ${source.name} 失败:`, error)
+      }
+    }
+    ElMessage.success(`已删除 ${successCount} 个视频源`)
+    selectedSources.value = []
+    loadData()
+  } catch (error) {
+    if (error !== 'cancel') {
+      console.error('批量删除失败:', error)
+    }
+  }
 }
 
 onMounted(() => {

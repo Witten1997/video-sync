@@ -25,6 +25,22 @@
         <el-option label="UP主投稿" value="submission" />
         <el-option label="URL下载" value="url" />
       </el-select>
+      <el-button
+        v-if="selectedVideos.length > 0"
+        type="primary"
+        @click="handleBatchRedownload"
+      >
+        <el-icon><Download /></el-icon>
+        批量重新下载 ({{ selectedVideos.length }})
+      </el-button>
+      <el-button
+        v-if="selectedVideos.length > 0"
+        type="danger"
+        @click="handleBatchDelete"
+      >
+        <el-icon><Delete /></el-icon>
+        批量删除 ({{ selectedVideos.length }})
+      </el-button>
       <div class="toolbar-right">
         <el-radio-group v-model="viewMode" size="small">
           <el-radio-button label="list">
@@ -101,7 +117,9 @@
       border
       stripe
       style="width: 100%"
+      @selection-change="handleSelectionChange"
     >
+      <el-table-column type="selection" width="55" align="center" />
       <el-table-column label="封面" width="150">
         <template #default="{ row }">
           <el-image
@@ -280,6 +298,7 @@ const currentPage = ref(1)
 const pageSize = ref(20)
 const total = ref(0)
 const viewMode = ref<'list' | 'grid'>('grid')
+const selectedVideos = ref<Video[]>([])
 
 // URL下载对话框
 const downloadDialogVisible = ref(false)
@@ -443,6 +462,74 @@ const isDownloadComplete = (status: number) => {
 // 格式化时间
 const formatTime = (time: string) => {
   return dayjs(time).format('YYYY-MM-DD HH:mm')
+}
+
+// 处理选择变化
+const handleSelectionChange = (selection: Video[]) => {
+  selectedVideos.value = selection
+}
+
+// 批量重新下载
+const handleBatchRedownload = async () => {
+  try {
+    await ElMessageBox.confirm(
+      `确定要重新下载选中的 ${selectedVideos.value.length} 个视频吗？`,
+      '提示',
+      {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    )
+
+    let successCount = 0
+    for (const video of selectedVideos.value) {
+      try {
+        await redownloadVideo(video.id)
+        successCount++
+      } catch (error) {
+        console.error(`重新下载视频 ${video.name} 失败:`, error)
+      }
+    }
+    ElMessage.success(`已创建 ${successCount} 个下载任务`)
+    selectedVideos.value = []
+  } catch (error) {
+    if (error !== 'cancel') {
+      console.error('批量重新下载失败:', error)
+    }
+  }
+}
+
+// 批量删除
+const handleBatchDelete = async () => {
+  try {
+    await ElMessageBox.confirm(
+      `确定要删除选中的 ${selectedVideos.value.length} 个视频吗？此操作将删除数据库记录和本地文件。`,
+      '提示',
+      {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    )
+
+    let successCount = 0
+    for (const video of selectedVideos.value) {
+      try {
+        await deleteVideo(video.id)
+        successCount++
+      } catch (error) {
+        console.error(`删除视频 ${video.name} 失败:`, error)
+      }
+    }
+    ElMessage.success(`已删除 ${successCount} 个视频`)
+    selectedVideos.value = []
+    loadData()
+  } catch (error) {
+    if (error !== 'cancel') {
+      console.error('批量删除失败:', error)
+    }
+  }
 }
 
 onMounted(() => {
