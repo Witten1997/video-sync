@@ -150,6 +150,15 @@ func (s *Server) setupRouter() {
 			videos.GET("/:id/pages", s.handleGetVideoPages)
 		}
 
+		// 下载记录
+		downloadRecords := api.Group("/download-records")
+		{
+			downloadRecords.GET("", s.handleListDownloadRecords)
+			downloadRecords.GET("/:id", s.handleGetDownloadRecord)
+			downloadRecords.POST("/:id/retry", s.handleRetryDownloadRecord)
+			downloadRecords.DELETE("/:id", s.handleDeleteDownloadRecord)
+		}
+
 		// 图片代理（用于解决B站防盗链问题）
 		api.GET("/image-proxy", s.handleImageProxy)
 
