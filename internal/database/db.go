@@ -99,6 +99,7 @@ func Migrate(db *gorm.DB) error {
 		&models.WatchLater{},
 		&models.Collection{},
 		&models.Submission{},
+		&models.DownloadRecord{},
 	}
 
 	for _, model := range models {
