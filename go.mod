@@ -1,6 +1,6 @@
 module bili-download
 
-go 1.23.3
+go 1.24.13
 
 require (
 	github.com/gin-contrib/cors v1.7.2

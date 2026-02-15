@@ -522,23 +522,25 @@ onMounted(() => {
 
 <style scoped>
 .video-sources {
-  padding: 20px;
+  padding: 32px;
 }
 
 .toolbar {
-  margin-bottom: 20px;
+  margin-bottom: 24px;
   display: flex;
-  gap: 10px;
+  gap: 12px;
+  align-items: center;
 }
 
 .filter-bar {
   display: flex;
   gap: 12px;
   align-items: center;
-  margin-bottom: 20px;
-  padding: 16px;
-  background: #f5f7fa;
-  border-radius: 4px;
+  margin-bottom: 24px;
+  padding: 16px 20px;
+  background: #ffffff;
+  border: 1px solid #f1f5f9;
+  border-radius: 12px;
   flex-wrap: wrap;
 }
 </style>

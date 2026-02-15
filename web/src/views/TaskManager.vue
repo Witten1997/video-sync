@@ -112,29 +112,22 @@ onUnmounted(() => {
 })
 </script>
 
-<style scoped lang="scss">
+<style scoped>
 .task-manager {
-  padding: 24px;
-
-  .page-header {
-    margin-bottom: 24px;
-
-    h2 {
-      margin: 0 0 8px 0;
-      font-size: 24px;
-      font-weight: 600;
-      color: #303133;
-    }
-
-    .page-description {
-      margin: 0;
-      font-size: 14px;
-      color: #909399;
-    }
-  }
-
-  .scheduler-control {
-    margin-bottom: 24px;
-  }
+  padding: 32px;
+}
+.page-header {
+  margin-bottom: 24px;
+}
+.page-header h2 {
+  margin: 0 0 8px 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #1e293b;
+}
+.page-description {
+  margin: 0;
+  font-size: 0.875rem;
+  color: #64748b;
 }
 </style>

@@ -598,81 +598,69 @@ onMounted(() => {
 })
 </script>
 
-<style scoped lang="scss">
+<style scoped>
 .sync-logs {
-  padding: 24px;
-
-  .page-header {
-    margin-bottom: 24px;
-
-    h2 {
-      margin: 0 0 8px 0;
-      font-size: 24px;
-      font-weight: 600;
-      color: #303133;
-    }
-
-    .page-description {
-      margin: 0;
-      font-size: 14px;
-      color: #909399;
-    }
-  }
-
-  .stats-card {
-    margin-bottom: 24px;
-
-    .card-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      font-weight: 600;
-    }
-
-    .stats-content {
-      :deep(.el-statistic) {
-        text-align: center;
-
-        .el-statistic__head {
-          font-size: 14px;
-          color: #909399;
-          margin-bottom: 8px;
-        }
-
-        .el-statistic__content {
-          font-size: 28px;
-          font-weight: 600;
-        }
-      }
-    }
-  }
-
-  .logs-card {
-    .card-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      font-weight: 600;
-    }
-
-    .filters {
-      margin-bottom: 16px;
-      padding: 16px;
-      background-color: #f5f7fa;
-      border-radius: 4px;
-
-      .el-form-item {
-        margin-bottom: 0;
-      }
-    }
-
-    .pagination {
-      display: flex;
-      justify-content: center;
-      margin-top: 20px;
-      padding-top: 16px;
-      border-top: 1px solid #ebeef5;
-    }
-  }
+  padding: 32px;
+}
+.page-header {
+  margin-bottom: 24px;
+}
+.page-header h2 {
+  margin: 0 0 8px 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #1e293b;
+}
+.page-description {
+  margin: 0;
+  font-size: 0.875rem;
+  color: #64748b;
+}
+.stats-card {
+  margin-bottom: 24px;
+  background: #fff;
+  border-radius: 1rem;
+  border-color: #f1f5f9;
+  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+}
+.stats-card :deep(.el-statistic) {
+  text-align: center;
+}
+.stats-card :deep(.el-statistic__head) {
+  font-size: 14px;
+  color: #64748b;
+  margin-bottom: 8px;
+}
+.stats-card :deep(.el-statistic__content) {
+  font-size: 28px;
+  font-weight: 600;
+}
+.logs-card {
+  background: #fff;
+  border-radius: 1rem;
+  border-color: #f1f5f9;
+  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+}
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-weight: 600;
+}
+.filters {
+  margin-bottom: 16px;
+  padding: 16px;
+  background-color: #f8fafc;
+  border-radius: 0.75rem;
+}
+.filters :deep(.el-form-item) {
+  margin-bottom: 0;
+}
+.pagination {
+  display: flex;
+  justify-content: center;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid #f1f5f9;
 }
 </style>

@@ -162,13 +162,15 @@ onUnmounted(() => {
 
 <style scoped>
 .logs {
-  padding: 20px;
+  padding: 32px;
 }
 
 .card-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  font-weight: 600;
+  font-size: 14px;
 }
 
 .header-actions {
@@ -181,8 +183,8 @@ onUnmounted(() => {
   height: calc(100vh - 280px);
   overflow-y: auto;
   background: #1e1e1e;
-  padding: 15px;
-  border-radius: 4px;
+  padding: 16px;
+  border-radius: 12px;
   font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
   font-size: 13px;
   line-height: 1.6;

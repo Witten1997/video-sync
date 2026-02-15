@@ -218,35 +218,39 @@ onMounted(() => {
 
 <style scoped>
 .video-detail {
-  padding: 20px;
+  padding: 32px;
 }
 
 .page-title {
-  font-size: 18px;
-  font-weight: 500;
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: #1e293b;
 }
 
 .detail-card {
-  margin-top: 20px;
+  margin-top: 24px;
 }
 
 .title-actions {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 20px;
+  margin-bottom: 24px;
 }
 
 .title-actions h2 {
   margin: 0;
   flex: 1;
+  font-size: 20px;
+  font-weight: 700;
+  color: #1e293b;
 }
 
 .info-desc {
-  margin-top: 20px;
+  margin-top: 24px;
 }
 
 .pages-card {
-  margin-top: 20px;
+  margin-top: 24px;
 }
 </style>

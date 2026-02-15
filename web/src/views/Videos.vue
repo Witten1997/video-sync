@@ -539,25 +539,25 @@ onMounted(() => {
 
 <style scoped>
 .videos {
-  padding: 20px;
+  padding: 32px;
 }
 
 .toolbar {
-  margin-bottom: 20px;
+  margin-bottom: 24px;
   display: flex;
-  gap: 10px;
+  gap: 12px;
   align-items: center;
 }
 
 .toolbar-right {
   margin-left: auto;
   display: flex;
-  gap: 10px;
+  gap: 12px;
   align-items: center;
 }
 
 .pagination {
-  margin-top: 20px;
+  margin-top: 24px;
   display: flex;
   justify-content: flex-end;
 }
@@ -568,8 +568,8 @@ onMounted(() => {
   justify-content: center;
   width: 100%;
   height: 100%;
-  background: #f5f7fa;
-  color: #909399;
+  background: #f8fafc;
+  color: #94a3b8;
   font-size: 30px;
 }
 
@@ -585,9 +585,23 @@ onMounted(() => {
   height: 100%;
 }
 
+.grid-item :deep(.el-card) {
+  border-radius: 16px;
+  border: 1px solid #f1f5f9;
+  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  overflow: hidden;
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
+}
+
+.grid-item :deep(.el-card:hover) {
+  box-shadow: 0 4px 12px 0 rgb(0 0 0 / 0.08);
+  transform: translateY(-2px);
+}
+
 .grid-cover-wrapper {
   position: relative;
   overflow: hidden;
+  border-radius: 16px 16px 0 0;
 }
 
 .grid-cover {
@@ -638,18 +652,19 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: #f5f7fa;
-  color: #909399;
+  background: #f8fafc;
+  color: #94a3b8;
   font-size: 40px;
 }
 
 .grid-content {
-  padding: 12px;
+  padding: 14px;
 }
 
 .grid-title {
   font-size: 14px;
   font-weight: 500;
+  color: #1e293b;
   margin-bottom: 8px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -662,11 +677,12 @@ onMounted(() => {
 }
 
 .grid-title:hover {
-  color: #409eff;
+  color: #3b82f6;
 }
 
 .grid-info {
   margin-bottom: 8px;
+  color: #64748b;
 }
 
 .grid-meta {
@@ -681,6 +697,7 @@ onMounted(() => {
 
 .grid-time {
   margin-bottom: 12px;
+  color: #94a3b8;
 }
 
 .grid-actions {

@@ -11,25 +11,25 @@ const routes: RouteRecordRaw[] = [
         path: 'dashboard',
         name: 'Dashboard',
         component: () => import('@/views/Dashboard.vue'),
-        meta: { title: '仪表盘', icon: 'Odometer' }
+        meta: { title: '控制台', icon: 'Odometer', materialIcon: 'dashboard' }
       },
       {
         path: 'subscription',
         name: 'Subscription',
         component: () => import('@/views/Subscription.vue'),
-        meta: { title: '快捷订阅', icon: 'Star' }
+        meta: { title: '快捷订阅', icon: 'Star', materialIcon: 'star' }
       },
       {
         path: 'video-sources',
         name: 'VideoSources',
         component: () => import('@/views/VideoSources.vue'),
-        meta: { title: '视频源管理', icon: 'FolderOpened' }
+        meta: { title: '视频源管理', icon: 'FolderOpened', materialIcon: 'rss_feed' }
       },
       {
         path: 'videos',
         name: 'Videos',
         component: () => import('@/views/Videos.vue'),
-        meta: { title: '视频列表', icon: 'VideoPlay' }
+        meta: { title: '视频列表', icon: 'VideoPlay', materialIcon: 'video_library' }
       },
       {
         path: 'videos/:id',
@@ -41,25 +41,25 @@ const routes: RouteRecordRaw[] = [
         path: 'tasks',
         name: 'TaskManager',
         component: () => import('@/views/TaskManager.vue'),
-        meta: { title: '任务管理', icon: 'List' }
+        meta: { title: '任务管理', icon: 'List', materialIcon: 'assignment' }
       },
       {
         path: 'sync-logs',
         name: 'SyncLogs',
         component: () => import('@/views/SyncLogs.vue'),
-        meta: { title: '同步日志', icon: 'Clock' }
+        meta: { title: '同步日志', icon: 'Clock', materialIcon: 'sync', section: '系统管理' }
       },
       {
         path: 'config',
         name: 'Config',
         component: () => import('@/views/Config.vue'),
-        meta: { title: '配置', icon: 'Setting' }
+        meta: { title: '配置', icon: 'Setting', materialIcon: 'settings' }
       },
       {
         path: 'logs',
         name: 'Logs',
         component: () => import('@/views/Logs.vue'),
-        meta: { title: '日志', icon: 'Document' }
+        meta: { title: '日志', icon: 'Document', materialIcon: 'terminal' }
       }
     ]
   }

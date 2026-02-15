@@ -470,70 +470,69 @@ defineExpose({
 })
 </script>
 
-<style scoped lang="scss">
-.task-queue {
-  .card-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    font-weight: 600;
+<style scoped>
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-weight: 600;
+  font-size: 14px;
+}
 
-    .header-actions {
-      display: flex;
-      gap: 8px;
-    }
-  }
+.header-actions {
+  display: flex;
+  gap: 8px;
+}
 
-  .queue-stats {
-    display: flex;
-    justify-content: space-around;
-    gap: 24px;
-    padding: 16px 0;
+.queue-stats {
+  display: flex;
+  justify-content: space-around;
+  gap: 24px;
+  padding: 16px 0;
+}
 
-    :deep(.el-statistic) {
-      text-align: center;
+.queue-stats :deep(.el-statistic) {
+  text-align: center;
+}
 
-      .el-statistic__head {
-        font-size: 13px;
-        color: #909399;
-        margin-bottom: 8px;
-      }
+.queue-stats :deep(.el-statistic__head) {
+  font-size: 13px;
+  color: #64748b;
+  margin-bottom: 8px;
+}
 
-      .el-statistic__content {
-        font-size: 24px;
-        font-weight: 600;
-      }
-    }
-  }
+.queue-stats :deep(.el-statistic__content) {
+  font-size: 24px;
+  font-weight: 600;
+}
 
-  .queue-filters {
-    margin-bottom: 20px;
+.queue-filters {
+  margin-bottom: 20px;
+}
 
-    .el-tabs {
-      margin-bottom: 16px;
-    }
+.queue-filters .el-tabs {
+  margin-bottom: 16px;
+}
 
-    .filter-controls {
-      display: flex;
-      gap: 12px;
-      align-items: center;
-    }
-  }
+.filter-controls {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
 
-  .task-list {
-    min-height: 200px;
+.task-list {
+  min-height: 200px;
+}
 
-    .empty-state {
-      padding: 40px 0;
-    }
-  }
+.empty-state {
+  padding: 40px 0;
+}
 
-  .queue-pagination {
-    display: flex;
-    justify-content: center;
-    margin-top: 24px;
-    padding-top: 16px;
-    border-top: 1px solid #ebeef5;
-  }
+.queue-pagination {
+  display: flex;
+  justify-content: center;
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid #f1f5f9;
 }
 </style>

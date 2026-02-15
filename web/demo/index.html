@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head>
+    <meta charset="utf-8"/>
+    <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+    <title>视频同步控制台 (中文版)</title>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&amp;family=Noto+Sans+SC:wght@300;400;500;700&amp;display=swap" rel="stylesheet"/>
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet"/>
+    <script>
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        primary: "#3b82f6",
+                        "background-light": "#f8fafc",
+                        "background-dark": "#0f172a",
+                        "sidebar-light": "#ffffff",
+                        "sidebar-dark": "#1e293b",
+                    },
+                    fontFamily: {
+                        display: ["Inter", "Noto Sans SC", "sans-serif"],
+                    },
+                    borderRadius: {
+                        DEFAULT: "12px",
+                    },
+                },
+            },
+        };
+    </script>
+    <style type="text/tailwindcss">
+        body { font-family: 'Inter', 'Noto Sans SC', sans-serif; }
+    </style>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 transition-colors duration-200">
+<div class="flex h-screen overflow-hidden">
+    <aside class="w-64 bg-sidebar-light dark:bg-sidebar-dark border-r border-slate-200 dark:border-slate-800 flex flex-col z-50">
+        <div class="p-6 flex items-center gap-3">
+            <div class="w-10 h-10 bg-primary rounded-xl flex items-center justify-center text-white">
+                <span class="material-icons-round">play_circle</span>
+            </div>
+            <span class="text-xl font-bold tracking-tight text-slate-800 dark:text-white">Video Sync</span>
+        </div>
+        <nav class="flex-1 px-4 space-y-2 mt-4">
+            <a class="flex items-center gap-3 px-4 py-3 bg-blue-50 dark:bg-blue-900/20 text-primary rounded-xl font-medium" href="#">
+                <span class="material-icons-round">dashboard</span>
+                控制台
+            </a>
+            <a class="flex items-center gap-3 px-4 py-3 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-xl transition-all" href="#">
+                <span class="material-icons-round">video_library</span>
+                视频库
+            </a>
+            <a class="flex items-center gap-3 px-4 py-3 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-xl transition-all" href="#">
+                <span class="material-icons-round">rss_feed</span>
+                投稿管理
+            </a>
+            <a class="flex items-center gap-3 px-4 py-3 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-xl transition-all" href="#">
+                <span class="material-icons-round">assignment</span>
+                任务列表
+            </a>
+            <div class="pt-4 pb-2 px-4 uppercase text-[10px] font-bold text-slate-400 dark:text-slate-500 tracking-widest">系统管理</div>
+            <a class="flex items-center gap-3 px-4 py-3 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-xl transition-all" href="#">
+                <span class="material-icons-round">sync</span>
+                同步日志
+            </a>
+            <a class="flex items-center gap-3 px-4 py-3 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-xl transition-all" href="#">
+                <span class="material-icons-round">settings</span>
+                设置
+            </a>
+        </nav>
+        <div class="p-4 border-t border-slate-200 dark:border-slate-800">
+            <button class="w-full flex items-center justify-center gap-2 py-2 border border-slate-200 dark:border-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors" onclick="document.documentElement.classList.toggle('dark')">
+                <span class="material-icons-round text-lg">dark_mode</span>
+                切换主题
+            </button>
+        </div>
+    </aside>
+    <main class="flex-1 flex flex-col overflow-y-auto">
+        <header class="h-20 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 sticky top-0 z-40 px-8 flex items-center justify-between">
+            <div class="flex items-center gap-4 flex-1">
+                <div class="relative w-96">
+                    <span class="material-icons-round absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">search</span>
+                    <input class="w-full pl-10 pr-4 py-2 bg-slate-100 dark:bg-slate-800 border-none rounded-xl text-sm focus:ring-2 focus:ring-primary/20 transition-all" placeholder="搜索任务、视频或日志..." type="text"/>
+                </div>
+            </div>
+            <div class="flex items-center gap-6">
+                <div class="flex items-center gap-2">
+<span class="inline-flex items-center justify-center h-8 px-2.5 rounded-full text-xs font-semibold bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400">
+                        系统错误: 500
+                    </span>
+                </div>
+                <button class="relative text-slate-500 dark:text-slate-400 hover:text-primary transition-colors">
+                    <span class="material-icons-round">notifications</span>
+                    <span class="absolute top-0 right-0 w-2 h-2 bg-red-500 rounded-full border-2 border-white dark:border-slate-900"></span>
+                </button>
+                <div class="flex items-center gap-3 pl-6 border-l border-slate-200 dark:border-slate-800">
+                    <div class="text-right">
+                        <p class="text-sm font-semibold">管理员</p>
+                        <p class="text-xs text-slate-500">高级管理员</p>
+                    </div>
+                    <img alt="User Profile" class="w-10 h-10 rounded-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuASm0Rj6J1mfwiiiA_7Om3FsYDElfrVF9oO3E5a7itoCeRPbzc2dkfKx5pRrpmqnT702T8WdX2cuw7UMXQGoFbNEaa0tDAEC2_iwU3JUHKvQcb32B6ds0xwj-YvO5Fe8PRmqL8Z0ca31_bB1fQH4hox37NZO3Iry1_Tz7RI7Ef5-P5jxxsV_-Q6VUKDCctnUE9P20B-k5a0zfWyHVSPMnaXwy-k4-TAHZRg3bSplpd5YymOY7Y1HVl-rehz3trQaW7ZjSsOb_ZIZmPg"/>
+                </div>
+            </div>
+        </header>
+        <div class="p-8 space-y-8">
+            <div class="flex items-end justify-between">
+                <div>
+                    <h1 class="text-2xl font-bold">系统控制台</h1>
+                    <p class="text-slate-500 text-sm">视频基础设施实时概览</p>
+                </div>
+                <div class="flex gap-2">
+                    <button class="px-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50 dark:hover:bg-slate-700 flex items-center gap-2">
+                        <span class="material-icons-round text-base">refresh</span>
+                        刷新
+                    </button>
+                    <button class="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-blue-600 shadow-lg shadow-primary/20 flex items-center gap-2">
+                        <span class="material-icons-round text-base">add</span>
+                        新建任务
+                    </button>
+                </div>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <div class="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm flex items-center gap-4">
+                    <div class="w-12 h-12 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-xl flex items-center justify-center">
+                        <span class="material-icons-round">movie</span>
+                    </div>
+                    <div>
+                        <p class="text-sm text-slate-500 font-medium">视频总数</p>
+                        <h3 class="text-2xl font-bold mt-1">1,284</h3>
+                    </div>
+                </div>
+                <div class="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm flex items-center gap-4">
+                    <div class="w-12 h-12 bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 rounded-xl flex items-center justify-center">
+                        <span class="material-icons-round">bolt</span>
+                    </div>
+                    <div>
+                        <p class="text-sm text-slate-500 font-medium">活跃源</p>
+                        <h3 class="text-2xl font-bold mt-1">42</h3>
+                    </div>
+                </div>
+                <div class="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm flex items-center gap-4">
+                    <div class="w-12 h-12 bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 rounded-xl flex items-center justify-center">
+                        <span class="material-icons-round">cloud_download</span>
+                    </div>
+                    <div>
+                        <p class="text-sm text-slate-500 font-medium">已下载</p>
+                        <h3 class="text-2xl font-bold mt-1">842</h3>
+                    </div>
+                </div>
+                <div class="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm flex items-center gap-4">
+                    <div class="w-12 h-12 bg-orange-100 dark:bg-orange-900/30 text-orange-600 dark:text-orange-400 rounded-xl flex items-center justify-center">
+                        <span class="material-icons-round">schedule</span>
+                    </div>
+                    <div>
+                        <p class="text-sm text-slate-500 font-medium">待处理任务</p>
+                        <h3 class="text-2xl font-bold mt-1">12</h3>
+                    </div>
+                </div>
+            </div>
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                <div class="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm col-span-1 lg:col-span-1">
+                    <div class="flex items-center justify-between mb-6">
+                        <h4 class="font-bold flex items-center gap-2">
+                            <span class="material-icons-round text-blue-500">memory</span>
+                            CPU 使用率
+                        </h4>
+                        <span class="text-xs font-bold text-blue-500">42.4%</span>
+                    </div>
+                    <div class="h-40 relative flex items-end gap-1">
+                        <div class="flex-1 bg-blue-100 dark:bg-blue-900/20 rounded-t-md hover:bg-primary transition-colors h-1/4"></div>
+                        <div class="flex-1 bg-blue-100 dark:bg-blue-900/20 rounded-t-md hover:bg-primary transition-colors h-1/3"></div>
+                        <div class="flex-1 bg-blue-100 dark:bg-blue-900/20 rounded-t-md hover:bg-primary transition-colors h-1/2"></div>
+                        <div class="flex-1 bg-blue-100 dark:bg-blue-900/20 rounded-t-md hover:bg-primary transition-colors h-2/3"></div>
+                        <div class="flex-1 bg-blue-100 dark:bg-blue-900/20 rounded-t-md hover:bg-primary transition-colors h-1/2"></div>
+                        <div class="flex-1 bg-blue-100 dark:bg-blue-900/20 rounded-t-md hover:bg-primary transition-colors h-3/4"></div>
+                        <div class="flex-1 bg-blue-100 dark:bg-blue-900/20 rounded-t-md hover:bg-primary transition-colors h-1/2"></div>
+                        <div class="flex-1 bg-blue-100 dark:bg-blue-900/20 rounded-t-md hover:bg-primary transition-colors h-4/5"></div>
+                    </div>
+                    <div class="flex justify-between mt-4 text-[10px] text-slate-400 font-medium">
+                        <span>12:00</span>
+                        <span>12:15</span>
+                        <span>12:30</span>
+                        <span>12:45</span>
+                    </div>
+                </div>
+                <div class="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm col-span-1 lg:col-span-1">
+                    <div class="flex items-center justify-between mb-6">
+                        <h4 class="font-bold flex items-center gap-2">
+                            <span class="material-icons-round text-purple-500">pie_chart</span>
+                            内存使用率
+                        </h4>
+                        <span class="text-xs font-bold text-purple-500">68% (8.2/12GB)</span>
+                    </div>
+                    <div class="space-y-6">
+                        <div class="relative pt-1">
+                            <div class="flex mb-2 items-center justify-between">
+<span class="text-xs font-semibold inline-block py-1 px-2 uppercase rounded-full text-purple-600 bg-purple-200 dark:bg-purple-900/30 dark:text-purple-400">
+                                    系统进程
+                                </span>
+                                <span class="text-xs font-semibold inline-block text-purple-600 dark:text-purple-400">35%</span>
+                            </div>
+                            <div class="overflow-hidden h-2 mb-4 text-xs flex rounded bg-purple-200 dark:bg-purple-900/20">
+                                <div class="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-purple-500" style="width:35%"></div>
+                            </div>
+                        </div>
+                        <div class="relative pt-1">
+                            <div class="flex mb-2 items-center justify-between">
+<span class="text-xs font-semibold inline-block py-1 px-2 uppercase rounded-full text-blue-600 bg-blue-200 dark:bg-blue-900/30 dark:text-blue-400">
+                                    缓存占用
+                                </span>
+                                <span class="text-xs font-semibold inline-block text-blue-600 dark:text-blue-400">23%</span>
+                            </div>
+                            <div class="overflow-hidden h-2 mb-4 text-xs flex rounded bg-blue-200 dark:bg-blue-900/20">
+                                <div class="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-blue-500" style="width:23%"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm col-span-1 lg:col-span-1">
+                    <div class="flex items-center justify-between mb-6">
+                        <h4 class="font-bold flex items-center gap-2">
+                            <span class="material-icons-round text-orange-500">storage</span>
+                            存储空间
+                        </h4>
+                    </div>
+                    <div class="flex justify-center mb-6">
+                        <div class="relative h-24 w-24">
+                            <svg class="h-full w-full" viewBox="0 0 36 36">
+                                <path class="text-slate-200 dark:text-slate-700" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" stroke-width="4"></path>
+                                <path class="text-orange-500" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" stroke-dasharray="72, 100" stroke-linecap="round" stroke-width="4"></path>
+                            </svg>
+                            <div class="absolute inset-0 flex items-center justify-center flex-col">
+                                <span class="text-lg font-bold">72%</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-4 text-center">
+                        <div>
+                            <p class="text-[10px] text-slate-500 uppercase font-bold tracking-wider">已使用</p>
+                            <p class="text-sm font-bold">1.4 TB</p>
+                        </div>
+                        <div>
+                            <p class="text-[10px] text-slate-500 uppercase font-bold tracking-wider">剩余</p>
+                            <p class="text-sm font-bold">512 GB</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
+                <div class="bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm col-span-1 xl:col-span-2 overflow-hidden">
+                    <div class="p-6 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between">
+                        <h4 class="font-bold">当前下载任务</h4>
+                        <div class="flex gap-2">
+                            <span class="px-2 py-1 bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 text-[10px] font-bold rounded uppercase">进行中: 4</span>
+                            <span class="px-2 py-1 bg-slate-100 text-slate-700 dark:bg-slate-700 dark:text-slate-400 text-[10px] font-bold rounded uppercase">排队中: 8</span>
+                        </div>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left">
+                            <thead class="bg-slate-50 dark:bg-slate-900/50 text-[10px] text-slate-500 uppercase tracking-widest font-bold">
+                            <tr>
+                                <th class="px-6 py-4">任务名称</th>
+                                <th class="px-6 py-4">状态</th>
+                                <th class="px-6 py-4">进度</th>
+                                <th class="px-6 py-4 text-right">操作</th>
+                            </tr>
+                            </thead>
+                            <tbody class="divide-y divide-slate-100 dark:divide-slate-700">
+                            <tr>
+                                <td class="px-6 py-4">
+                                    <div class="flex flex-col">
+                                        <span class="text-sm font-medium">Summer_Vlog_2023_4K.mp4</span>
+                                        <span class="text-xs text-slate-400">来源: YouTube RSS</span>
+                                    </div>
+                                </td>
+                                <td class="px-6 py-4">
+<span class="inline-flex items-center gap-1 text-xs font-semibold text-green-600">
+<span class="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse"></span>
+                                            下载中
+                                        </span>
+                                </td>
+                                <td class="px-6 py-4">
+                                    <div class="w-full bg-slate-100 dark:bg-slate-700 h-1.5 rounded-full overflow-hidden max-w-[100px]">
+                                        <div class="bg-primary h-full w-[65%]"></div>
+                                    </div>
+                                    <span class="text-[10px] text-slate-400 mt-1 block">65% • 12MB/s</span>
+                                </td>
+                                <td class="px-6 py-4 text-right">
+                                    <button class="text-slate-400 hover:text-red-500 transition-colors">
+                                        <span class="material-icons-round text-lg">pause_circle</span>
+                                    </button>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td class="px-6 py-4">
+                                    <div class="flex flex-col">
+                                        <span class="text-sm font-medium">Product_Launch_Event.mkv</span>
+                                        <span class="text-xs text-slate-400">来源: Direct Link</span>
+                                    </div>
+                                </td>
+                                <td class="px-6 py-4">
+<span class="inline-flex items-center gap-1 text-xs font-semibold text-slate-500">
+<span class="w-1.5 h-1.5 bg-slate-400 rounded-full"></span>
+                                            排队中
+                                        </span>
+                                </td>
+                                <td class="px-6 py-4">
+                                    <div class="w-full bg-slate-100 dark:bg-slate-700 h-1.5 rounded-full overflow-hidden max-w-[100px]">
+                                        <div class="bg-slate-300 dark:bg-slate-500 h-full w-[0%]"></div>
+                                    </div>
+                                    <span class="text-[10px] text-slate-400 mt-1 block">等待中...</span>
+                                </td>
+                                <td class="px-6 py-4 text-right">
+                                    <button class="text-slate-400 hover:text-red-500 transition-colors">
+                                        <span class="material-icons-round text-lg">cancel</span>
+                                    </button>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td class="px-6 py-4">
+                                    <div class="flex flex-col">
+                                        <span class="text-sm font-medium">Daily_News_Brief_01.mp4</span>
+                                        <span class="text-xs text-slate-400">来源: Auto-Sync</span>
+                                    </div>
+                                </td>
+                                <td class="px-6 py-4">
+<span class="inline-flex items-center gap-1 text-xs font-semibold text-red-600">
+<span class="w-1.5 h-1.5 bg-red-500 rounded-full"></span>
+                                            失败
+                                        </span>
+                                </td>
+                                <td class="px-6 py-4">
+                                    <div class="w-full bg-slate-100 dark:bg-slate-700 h-1.5 rounded-full overflow-hidden max-w-[100px]">
+                                        <div class="bg-red-500 h-full w-[12%]"></div>
+                                    </div>
+                                    <span class="text-[10px] text-red-400 mt-1 block">网络错误</span>
+                                </td>
+                                <td class="px-6 py-4 text-right">
+                                    <button class="text-slate-400 hover:text-primary transition-colors">
+                                        <span class="material-icons-round text-lg">refresh</span>
+                                    </button>
+                                </td>
+                            </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm col-span-1">
+                    <div class="flex items-center justify-between mb-6">
+                        <h4 class="font-bold">计划同步</h4>
+                        <span class="material-icons-round text-slate-400">more_horiz</span>
+                    </div>
+                    <div class="space-y-4">
+                        <div class="flex items-center gap-4 p-4 bg-slate-50 dark:bg-slate-900/50 rounded-xl">
+                            <div class="bg-blue-500/10 text-blue-500 p-2 rounded-lg">
+                                <span class="material-icons-round text-xl">event</span>
+                            </div>
+                            <div class="flex-1">
+                                <p class="text-sm font-semibold">早间摘要</p>
+                                <p class="text-[10px] text-slate-500 uppercase tracking-wider">开始于 2h 15m</p>
+                            </div>
+                            <div class="text-right">
+                                <p class="text-xs font-bold text-primary">08:00 AM</p>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-4 p-4 bg-slate-50 dark:bg-slate-900/50 rounded-xl opacity-60">
+                            <div class="bg-slate-500/10 text-slate-500 p-2 rounded-lg">
+                                <span class="material-icons-round text-xl">event</span>
+                            </div>
+                            <div class="flex-1">
+                                <p class="text-sm font-semibold">每周备份</p>
+                                <p class="text-[10px] text-slate-500 uppercase tracking-wider">每周日重复</p>
+                            </div>
+                            <div class="text-right">
+                                <p class="text-xs font-bold text-slate-500">周日</p>
+                            </div>
+                        </div>
+                    </div>
+                    <button class="w-full mt-6 py-3 border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-xl text-slate-400 hover:text-primary hover:border-primary/50 transition-all text-sm font-medium">
+                        + 添加计划
+                    </button>
+                </div>
+            </div>
+        </div>
+    </main>
+</div>
+
+</body></html>

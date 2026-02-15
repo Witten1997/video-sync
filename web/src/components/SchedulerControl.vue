@@ -206,62 +206,63 @@ defineExpose({
 })
 </script>
 
-<style scoped lang="scss">
+<style scoped>
 .scheduler-control {
-  .card-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    font-weight: 600;
-  }
+  margin-bottom: 24px;
+}
 
-  .control-content {
-    display: flex;
-    flex-direction: column;
-    gap: 24px;
-  }
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-weight: 600;
+  font-size: 14px;
+}
 
-  .status-section {
-    display: flex;
-    gap: 32px;
-    align-items: flex-start;
+.control-content {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
 
-    .status-indicator {
-      .status-icon {
-        margin-right: 4px;
-      }
-    }
+.status-section {
+  display: flex;
+  gap: 32px;
+  align-items: flex-start;
+}
 
-    .status-info {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
+.status-indicator .status-icon {
+  margin-right: 4px;
+}
 
-      .info-item {
-        display: flex;
-        align-items: center;
-        font-size: 14px;
+.status-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
 
-        .label {
-          color: #909399;
-          margin-right: 8px;
-          min-width: 80px;
-        }
+.info-item {
+  display: flex;
+  align-items: center;
+  font-size: 14px;
+}
 
-        .value {
-          color: #303133;
-          font-weight: 500;
-        }
-      }
-    }
-  }
+.info-item .label {
+  color: #64748b;
+  margin-right: 8px;
+  min-width: 80px;
+}
 
-  .action-buttons {
-    display: flex;
-    gap: 12px;
-    padding-top: 12px;
-    border-top: 1px solid #ebeef5;
-  }
+.info-item .value {
+  color: #1e293b;
+  font-weight: 500;
+}
+
+.action-buttons {
+  display: flex;
+  gap: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #f1f5f9;
 }
 </style>

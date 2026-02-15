@@ -276,147 +276,136 @@ const handleCancel = () => emit('cancel', props.task.id)
 const handleRemove = () => emit('remove', props.task.id)
 </script>
 
-<style scoped lang="scss">
+<style scoped>
 .task-card {
   margin-bottom: 16px;
   transition: all 0.3s;
+}
 
-  &:hover {
-    box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
-  }
+.task-card:hover {
+  box-shadow: 0 4px 12px 0 rgba(0, 0, 0, 0.08);
+}
 
-  &.status-running {
-    border-left: 4px solid #409eff;
-  }
+.task-card.status-running {
+  border-left: 4px solid #3b82f6;
+}
 
-  &.status-completed {
-    border-left: 4px solid #67c23a;
-  }
+.task-card.status-completed {
+  border-left: 4px solid #22c55e;
+}
 
-  &.status-failed {
-    border-left: 4px solid #f56c6c;
-  }
+.task-card.status-failed {
+  border-left: 4px solid #ef4444;
+}
 
-  &.status-paused {
-    border-left: 4px solid #e6a23c;
-  }
+.task-card.status-paused {
+  border-left: 4px solid #f59e0b;
+}
 
-  .task-content {
-    display: flex;
-    gap: 16px;
-  }
+.task-content {
+  display: flex;
+  gap: 16px;
+}
 
-  .task-cover {
-    position: relative;
-    flex-shrink: 0;
-    width: 160px;
-    height: 90px;
-    border-radius: 4px;
-    overflow: hidden;
+.task-cover {
+  position: relative;
+  flex-shrink: 0;
+  width: 160px;
+  height: 90px;
+  border-radius: 8px;
+  overflow: hidden;
+}
 
-    .el-image {
-      width: 100%;
-      height: 100%;
-    }
+.task-cover .el-image {
+  width: 100%;
+  height: 100%;
+}
 
-    .image-slot {
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      width: 100%;
-      height: 100%;
-      background-color: #f5f7fa;
-      color: #909399;
-      font-size: 32px;
-    }
+.image-slot {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  height: 100%;
+  background-color: #f8fafc;
+  color: #94a3b8;
+  font-size: 32px;
+}
 
-    .type-badge {
-      position: absolute;
-      top: 4px;
-      right: 4px;
-    }
-  }
+.type-badge {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+}
 
-  .task-info {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    min-width: 0;
+.task-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
 
-    .task-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-      gap: 12px;
+.task-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
 
-      .task-title {
-        flex: 1;
-        margin: 0;
-        font-size: 16px;
-        font-weight: 500;
-        color: #303133;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-      }
-    }
+.task-title {
+  flex: 1;
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: #1e293b;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
-    .task-meta {
-      display: flex;
-      gap: 16px;
-      flex-wrap: wrap;
+.task-meta {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
 
-      .meta-item {
-        display: flex;
-        align-items: center;
-        gap: 4px;
-        font-size: 13px;
-        color: #606266;
+.meta-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  color: #64748b;
+}
 
-        .el-icon {
-          color: #909399;
-        }
+.meta-item .el-icon {
+  color: #94a3b8;
+}
 
-        span {
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-        }
-      }
-    }
+.meta-item span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 
-    .task-progress {
-      .progress-info {
-        display: flex;
-        justify-content: space-between;
-        margin-top: 4px;
-        font-size: 12px;
-        color: #909399;
+.progress-info {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 4px;
+  font-size: 12px;
+  color: #94a3b8;
+}
 
-        .speed {
-          font-weight: 500;
-          color: #409eff;
-        }
-      }
-    }
+.progress-info .speed {
+  font-weight: 500;
+  color: #3b82f6;
+}
 
-    .task-error {
-      margin: 0;
-    }
-
-    .task-retry {
-      display: flex;
-      align-items: center;
-    }
-
-    .task-actions {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding-top: 8px;
-      border-top: 1px solid #ebeef5;
-    }
-  }
+.task-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding-top: 8px;
+  border-top: 1px solid #f1f5f9;
 }
 </style>

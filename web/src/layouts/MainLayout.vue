@@ -1,59 +1,68 @@
 <template>
-  <el-container class="layout-container">
-    <el-aside width="250px" class="sidebar">
-      <div class="logo">
-        <img src="/logo.png" alt="Video Sync Logo" class="logo-image" />
-        <span>Video Sync</span>
+  <div class="flex h-screen overflow-hidden bg-background-light">
+    <!-- Sidebar -->
+    <aside class="w-64 bg-sidebar-light border-r border-slate-200 flex flex-col z-50 shrink-0">
+      <div class="p-6 flex items-center gap-3">
+        <div class="w-10 h-10 bg-primary rounded-xl flex items-center justify-center text-white">
+          <span class="material-icons-round">play_circle</span>
+        </div>
+        <span class="text-xl font-bold tracking-tight text-slate-800">Video Sync</span>
       </div>
-      <el-menu
-        :default-active="activeMenu"
-        router
-        class="sidebar-menu"
-        background-color="transparent"
-        text-color="#595959"
-        active-text-color="#1890ff"
-      >
-        <el-menu-item
-          v-for="route in menuRoutes"
-          :key="route.path"
-          :index="route.path"
-        >
-          <el-icon>
-            <component :is="route.meta?.icon" />
-          </el-icon>
-          <span>{{ route.meta?.title }}</span>
-        </el-menu-item>
-      </el-menu>
-    </el-aside>
+      <nav class="flex-1 px-4 space-y-1 mt-2 overflow-y-auto">
+        <template v-for="route in menuRoutes" :key="route.path">
+          <!-- Section header -->
+          <div
+            v-if="route.meta?.section"
+            class="pt-4 pb-2 px-4 uppercase text-[10px] font-bold text-slate-400 tracking-widest"
+          >
+            {{ route.meta.section }}
+          </div>
+          <router-link
+            :to="route.path"
+            :class="[
+              'flex items-center gap-3 px-4 py-3 rounded-xl transition-all cursor-pointer no-underline',
+              isActive(route.path)
+                ? 'bg-blue-50 text-primary font-medium'
+                : 'text-slate-600 hover:bg-slate-50'
+            ]"
+          >
+            <span class="material-icons-round text-[20px]">{{ route.meta?.materialIcon || 'circle' }}</span>
+            <span class="text-sm">{{ route.meta?.title }}</span>
+          </router-link>
+        </template>
+      </nav>
+    </aside>
 
-    <el-container>
-      <el-header class="header">
-        <div class="header-left">
-          <el-breadcrumb separator="/">
-            <el-breadcrumb-item>{{ currentTitle }}</el-breadcrumb-item>
-          </el-breadcrumb>
+    <!-- Main content -->
+    <div class="flex-1 flex flex-col overflow-hidden">
+      <!-- Header -->
+      <header class="h-16 bg-white/80 backdrop-blur-md border-b border-slate-200 sticky top-0 z-40 px-8 flex items-center justify-between shrink-0">
+        <div class="flex items-center gap-4 flex-1">
+          <h2 class="text-lg font-semibold text-slate-800">{{ currentTitle }}</h2>
         </div>
-        <div class="header-right">
-          <el-button text @click="handleRefresh">
-            <el-icon><Refresh /></el-icon>
-          </el-button>
-          <el-dropdown>
-            <el-button text>
-              <el-icon><User /></el-icon>
-            </el-button>
-            <template #dropdown>
-              <el-dropdown-menu>
-                <el-dropdown-item>用户信息</el-dropdown-item>
-                <el-dropdown-item divided>退出登录</el-dropdown-item>
-              </el-dropdown-menu>
-            </template>
-          </el-dropdown>
+        <div class="flex items-center gap-4">
+          <button
+            class="p-2 text-slate-500 hover:text-primary transition-colors rounded-lg hover:bg-slate-100 border-0 outline-none"
+            @click="handleRefresh"
+          >
+            <span class="material-icons-round">refresh</span>
+          </button>
+          <div class="flex items-center gap-3 pl-4 border-l border-slate-200">
+            <div class="text-right">
+              <p class="text-sm font-semibold text-slate-800">管理员</p>
+            </div>
+            <div class="w-9 h-9 bg-primary/10 rounded-full flex items-center justify-center">
+              <span class="material-icons-round text-primary text-[20px]">person</span>
+            </div>
+          </div>
         </div>
-      </el-header>
+      </header>
 
+      <!-- Tabs bar -->
       <TabsBar />
 
-      <el-main class="main-content">
+      <!-- Content area -->
+      <main class="flex-1 overflow-y-auto bg-background-light">
         <router-view v-slot="{ Component }">
           <transition name="fade" mode="out-in">
             <keep-alive :include="tabsStore.cachedViews">
@@ -61,9 +70,9 @@
             </keep-alive>
           </transition>
         </router-view>
-      </el-main>
-    </el-container>
-  </el-container>
+      </main>
+    </div>
+  </div>
 </template>
 
 <script setup lang="ts">
@@ -76,7 +85,6 @@ const route = useRoute()
 const router = useRouter()
 const tabsStore = useTabsStore()
 
-// 监听路由变化，自动添加标签页
 watch(
   () => route.path,
   () => {
@@ -85,7 +93,6 @@ watch(
   { immediate: true }
 )
 
-// 获取菜单路由（排除隐藏的路由）
 const menuRoutes = computed(() => {
   const routes = router.getRoutes()
   return routes
@@ -97,226 +104,37 @@ const menuRoutes = computed(() => {
     }))
 })
 
-// 当前激活的菜单
-const activeMenu = computed(() => {
-  return '/' + route.path.split('/')[1]
-})
+const isActive = (path: string) => {
+  return '/' + route.path.split('/')[1] === path
+}
 
-// 当前页面标题
 const currentTitle = computed(() => {
   return route.meta?.title || '首页'
 })
 
-// 刷新页面
 const handleRefresh = () => {
   router.go(0)
 }
 </script>
 
 <style scoped>
-.layout-container {
-  width: 100%;
-  height: 100%;
-}
-
-.sidebar {
-  background: linear-gradient(180deg, #fafbfc 0%, #d4d4da 100%);
-  height: 100%;
-  overflow-y: auto;
-  box-shadow: 2px 0 8px rgba(0, 21, 41, 0.08);
-  position: relative;
-  border-right: 1px solid #e8e8e8;
-}
-
-.sidebar::before {
-  content: '';
-  position: absolute;
-  right: 0;
-  top: 0;
-  bottom: 0;
-  width: 2px;
-  background: linear-gradient(180deg,
-    rgba(24, 144, 255, 0) 0%,
-    rgba(24, 144, 255, 0.2) 50%,
-    rgba(24, 144, 255, 0) 100%
-  );
-}
-
-/* 自定义滚动条 */
-.sidebar::-webkit-scrollbar {
-  width: 6px;
-}
-
-.sidebar::-webkit-scrollbar-thumb {
-  background: #d9d9d9;
-  border-radius: 3px;
-}
-
-.sidebar::-webkit-scrollbar-thumb:hover {
-  background: #bfbfbf;
-}
-
-.logo {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 64px;
-  color: #1890ff;
-  font-size: 20px;
-  font-weight: bold;
-  gap: 10px;
-  position: relative;
-  margin-bottom: 8px;
-  background: linear-gradient(135deg,
-    rgba(24, 144, 255, 0.08) 0%,
-    rgba(54, 207, 201, 0.08) 100%
-  );
-}
-
-.logo::after {
-  content: '';
-  position: absolute;
-  bottom: 0;
-  left: 20px;
-  right: 20px;
-  height: 2px;
-  background: linear-gradient(90deg,
-    transparent 0%,
-    rgba(24, 144, 255, 0.3) 50%,
-    transparent 100%
-  );
-}
-
-.logo .el-icon {
-  font-size: 28px;
-  background: linear-gradient(135deg, #1890ff, #36cfc9);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  filter: drop-shadow(0 0 6px rgba(24, 144, 255, 0.3));
-}
-
-.logo-image {
-  width: 40px;
-  height: 40px;
-  object-fit: contain;
-  filter: drop-shadow(0 0 6px rgba(24, 144, 255, 0.3));
-}
-
-.sidebar-menu {
-  border-right: none;
-  padding: 8px 12px;
-}
-
-/* 自定义菜单项样式 */
-.sidebar-menu :deep(.el-menu-item) {
-  margin-bottom: 4px;
-  border-radius: 8px;
-  height: 48px;
-  line-height: 48px;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  position: relative;
-  overflow: hidden;
-  color: #595959;
-}
-
-.sidebar-menu :deep(.el-menu-item)::before {
-  content: '';
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 3px;
-  background: linear-gradient(180deg, #1890ff, #36cfc9);
-  transform: scaleY(0);
-  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  border-radius: 0 3px 3px 0;
-}
-
-.sidebar-menu :deep(.el-menu-item:hover) {
-  background: #e6f7ff !important;
-  color: #1890ff !important;
-  transform: translateX(4px);
-}
-
-.sidebar-menu :deep(.el-menu-item:hover)::before {
-  transform: scaleY(1);
-}
-
-.sidebar-menu :deep(.el-menu-item.is-active) {
-  background: linear-gradient(135deg,
-    rgba(24, 144, 255, 0.12) 0%,
-    rgba(54, 207, 201, 0.12) 100%
-  ) !important;
-  color: #1890ff !important;
-  font-weight: 500;
-  border: 1px solid rgba(24, 144, 255, 0.2);
-  box-shadow: 0 2px 8px rgba(24, 144, 255, 0.15);
-}
-
-.sidebar-menu :deep(.el-menu-item.is-active)::before {
-  transform: scaleY(1);
-}
-
-.sidebar-menu :deep(.el-menu-item .el-icon) {
-  font-size: 18px;
-  margin-right: 8px;
-  transition: all 0.3s;
-  color: #8c8c8c;
-}
-
-.sidebar-menu :deep(.el-menu-item:hover .el-icon) {
-  transform: scale(1.1);
-  color: #36cfc9;
-}
-
-.sidebar-menu :deep(.el-menu-item.is-active .el-icon) {
-  color: #36cfc9;
-  filter: drop-shadow(0 0 3px rgba(54, 207, 201, 0.4));
-}
-
-.header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  border-bottom: 1px solid #f0f0f0;
-  background: #fff;
-  padding: 0 20px;
-  box-shadow: 0 1px 4px rgba(0, 21, 41, 0.08);
-}
-
-.header-left {
-  flex: 1;
-}
-
-.header-right {
-  display: flex;
-  align-items: center;
-  gap: 15px;
-}
-
-.header-right :deep(.el-button) {
-  transition: all 0.3s;
-}
-
-.header-right :deep(.el-button:hover) {
-  color: #1890ff;
-  transform: scale(1.1);
-}
-
-.main-content {
-  background: #f0f2f5;
-  overflow-y: auto;
-  padding: 20px;
-}
-
-/* 页面切换动画 */
 .fade-enter-active,
 .fade-leave-active {
-  transition: opacity 0.3s;
+  transition: opacity 0.2s;
 }
 
 .fade-enter-from,
 .fade-leave-to {
   opacity: 0;
+}
+
+/* Scrollbar for sidebar */
+nav::-webkit-scrollbar {
+  width: 4px;
+}
+
+nav::-webkit-scrollbar-thumb {
+  background: #e2e8f0;
+  border-radius: 2px;
 }
 </style>

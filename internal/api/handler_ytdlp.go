@@ -165,10 +165,10 @@ func updateYtdlp() (string, error) {
 		// 检查是否有 pip3
 		if _, err := exec.LookPath("pip3"); err == nil {
 			utils.Info("检测到 pip3，使用 pip3 更新")
-			cmd = exec.Command("pip3", "install", "--upgrade", "yt-dlp")
+			cmd = exec.Command("pip3", "install", "--upgrade", "--break-system-packages", "yt-dlp")
 		} else if _, err := exec.LookPath("pip"); err == nil {
 			utils.Info("使用 pip 更新")
-			cmd = exec.Command("pip", "install", "--upgrade", "yt-dlp")
+			cmd = exec.Command("pip", "install", "--upgrade", "--break-system-packages", "yt-dlp")
 		} else {
 			// 没有 pip，使用 yt-dlp 自更新
 			utils.Info("未找到 pip，使用 yt-dlp -U 命令更新")

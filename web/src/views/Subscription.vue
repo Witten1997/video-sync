@@ -566,7 +566,7 @@ onMounted(() => {
 
 <style scoped>
 .subscription-page {
-  padding: 20px;
+  padding: 32px;
 }
 
 .header {
@@ -593,7 +593,7 @@ onMounted(() => {
   color: #409eff;
   padding: 4px 8px;
   background: #ecf5ff;
-  border-radius: 4px;
+  border-radius: 6px;
 }
 
 .folder-info {
@@ -606,7 +606,7 @@ onMounted(() => {
   width: 60px;
   height: 40px;
   object-fit: cover;
-  border-radius: 4px;
+  border-radius: 8px;
 }
 
 .upper-info {
@@ -634,7 +634,7 @@ onMounted(() => {
 
 .upper-sign {
   font-size: 12px;
-  color: #909399;
+  color: #94a3b8;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -644,7 +644,7 @@ onMounted(() => {
 .grid-view {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 16px;
+  gap: 20px;
   margin-top: 20px;
 }
 
@@ -652,11 +652,17 @@ onMounted(() => {
   height: 100%;
 }
 
+.grid-item :deep(.el-card) {
+  border-radius: 12px;
+  border: 1px solid #f1f5f9;
+}
+
 .grid-cover {
   width: 100%;
   height: 120px;
   object-fit: cover;
   display: block;
+  border-radius: 12px 12px 0 0;
 }
 
 .grid-content {
@@ -678,18 +684,18 @@ onMounted(() => {
   align-items: center;
   margin-bottom: 8px;
   font-size: 13px;
-  color: #606266;
+  color: #64748b;
 }
 
 .grid-time {
   font-size: 12px;
-  color: #909399;
+  color: #94a3b8;
   margin-bottom: 12px;
 }
 
 .grid-fid {
   font-size: 12px;
-  color: #909399;
+  color: #94a3b8;
   margin-bottom: 8px;
 }
 
@@ -728,13 +734,13 @@ onMounted(() => {
 
 .upper-card-uid {
   font-size: 11px;
-  color: #909399;
+  color: #94a3b8;
   margin-bottom: 6px;
 }
 
 .upper-card-sign {
   font-size: 12px;
-  color: #606266;
+  color: #64748b;
   margin-bottom: 8px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -748,7 +754,7 @@ onMounted(() => {
 
 .upper-card-time {
   font-size: 11px;
-  color: #909399;
+  color: #94a3b8;
   margin-bottom: 8px;
 }
 </style>

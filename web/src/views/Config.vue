@@ -883,20 +883,20 @@ onUnmounted(() => {
 
 <style scoped>
 .config {
-  padding: 20px;
+  padding: 32px;
 }
 
 .help-text {
   font-size: 12px;
-  color: #909399;
+  color: #94a3b8;
   display: block;
   margin-top: 5px;
 }
 
 .actions {
-  margin-top: 30px;
+  margin-top: 32px;
   text-align: right;
-  border-top: 1px solid #ebeef5;
+  border-top: 1px solid #f1f5f9;
   padding-top: 20px;
 }
 
@@ -912,7 +912,7 @@ onUnmounted(() => {
 .version-info {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
 }
 
 /* ==================== 二维码登录样式 ==================== */
@@ -929,7 +929,7 @@ onUnmounted(() => {
 .qrcode-placeholder .tip {
   margin-top: 15px;
   font-size: 14px;
-  color: #909399;
+  color: #94a3b8;
 }
 
 .qrcode-container {
@@ -946,8 +946,8 @@ onUnmounted(() => {
 
 .qrcode-wrapper canvas {
   display: block;
-  border: 1px solid #dcdfe6;
-  border-radius: 4px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
 }
 
 .qrcode-mask {
@@ -960,7 +960,7 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 4px;
+  border-radius: 12px;
 }
 
 .status-box {
@@ -972,14 +972,14 @@ onUnmounted(() => {
   margin: 12px 0 0 0;
   font-size: 16px;
   font-weight: 500;
-  color: #303133;
+  color: #1e293b;
 }
 
 .status-box .sub {
   margin-top: 8px;
   font-size: 14px;
   font-weight: normal;
-  color: #909399;
+  color: #94a3b8;
 }
 
 .status-box .el-button {
@@ -1002,7 +1002,7 @@ onUnmounted(() => {
   align-items: center;
   margin-top: 15px;
   padding-top: 15px;
-  border-top: 1px solid #ebeef5;
+  border-top: 1px solid #f1f5f9;
 }
 
 .countdown {
@@ -1010,12 +1010,12 @@ onUnmounted(() => {
   align-items: center;
   gap: 8px;
   font-size: 14px;
-  color: #606266;
+  color: #475569;
 }
 
 .countdown .el-icon {
   font-size: 16px;
-  color: #909399;
+  color: #94a3b8;
 }
 
 </style>
