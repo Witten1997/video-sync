@@ -2,6 +2,7 @@ package downloader
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -116,6 +117,11 @@ func NewDownloadManager(cfg *config.Config, db *gorm.DB, biliClient *bilibili.Cl
 				Progress:  progress,
 				Timestamp: time.Now(),
 			})
+		}
+
+		// 更新下载记录
+		if manager.db != nil {
+			manager.updateDownloadRecordProgress(videoID, taskName, progress)
 		}
 	})
 
@@ -287,6 +293,16 @@ func (dm *DownloadManager) executeVideoTask(task *DownloadTask) {
 			task.SetError(err)
 			task.SetStatus(TaskStatusFailed)
 			dm.handleTaskFailure(task)
+			// 更新下载记录为失败
+			if dm.db != nil && task.RecordID > 0 {
+				now := time.Now()
+				dm.db.Model(&models.DownloadRecord{}).Where("id = ?", task.RecordID).
+					Updates(map[string]interface{}{
+						"status":        "failed",
+						"error_message": err.Error(),
+						"completed_at":  now,
+					})
+			}
 			return
 		}
 
@@ -299,12 +315,32 @@ func (dm *DownloadManager) executeVideoTask(task *DownloadTask) {
 			task.SetError(err)
 			task.SetStatus(TaskStatusFailed)
 			dm.handleTaskFailure(task)
+			// 更新下载记录为失败
+			if dm.db != nil && task.RecordID > 0 {
+				now := time.Now()
+				dm.db.Model(&models.DownloadRecord{}).Where("id = ?", task.RecordID).
+					Updates(map[string]interface{}{
+						"status":        "failed",
+						"error_message": err.Error(),
+						"completed_at":  now,
+					})
+			}
 			return
 		}
 	}
 
 	// 任务完成
 	task.SetStatus(TaskStatusCompleted)
+
+	// 更新下载记录为完成
+	if dm.db != nil && task.RecordID > 0 {
+		now := time.Now()
+		dm.db.Model(&models.DownloadRecord{}).Where("id = ?", task.RecordID).
+			Updates(map[string]interface{}{
+				"status":       "completed",
+				"completed_at": now,
+			})
+	}
 
 	// 更新数据库中的视频下载状态
 	if dm.db != nil {
@@ -475,6 +511,27 @@ func (dm *DownloadManager) PrepareAndAddVideoTask(video *models.Video, baseDir s
 	// 创建下载任务
 	task := NewDownloadTask(TaskTypeVideo, &videoWithPages, nil, outputDir)
 	task.Priority = priority
+
+	// 创建下载记录
+	if dm.db != nil {
+		fileDetails := dm.buildFileDetails(&videoWithPages)
+		detailsJSON, _ := json.Marshal(fileDetails)
+		sourceType, sourceID, sourceName := dm.getVideoSourceInfo(&videoWithPages)
+
+		record := &models.DownloadRecord{
+			VideoID:     videoWithPages.ID,
+			SourceType:  sourceType,
+			SourceID:    sourceID,
+			SourceName:  sourceName,
+			Status:      "pending",
+			FileDetails: detailsJSON,
+		}
+		if err := dm.db.Create(record).Error; err != nil {
+			utils.Warn("创建下载记录失败: %v", err)
+		} else {
+			task.RecordID = record.ID
+		}
+	}
 
 	if err := dm.AddTask(task); err != nil {
 		return nil, err
@@ -824,4 +881,111 @@ func (dm *DownloadManager) updateQueuedTaskPaths(oldBase, newBase string) {
 // GetDownloader 获取下载器实例
 func (dm *DownloadManager) GetDownloader() *Downloader {
 	return dm.downloader
+}
+
+// buildFileDetails 根据配置构建文件详情列表
+func (dm *DownloadManager) buildFileDetails(video *models.Video) models.FileDetailsData {
+	files := []models.FileDetail{
+		{Name: "video", Label: "视频", Status: "pending"},
+	}
+	if dm.config != nil {
+		if !dm.config.Download.SkipPoster {
+			files = append(files, models.FileDetail{Name: "poster", Label: "封面", Status: "pending"})
+		}
+		if !dm.config.Download.SkipVideoNFO {
+			files = append(files, models.FileDetail{Name: "nfo", Label: "NFO", Status: "pending"})
+		}
+		if !dm.config.Download.SkipDanmaku {
+			files = append(files, models.FileDetail{Name: "danmaku", Label: "弹幕", Status: "pending"})
+		}
+		if !dm.config.Download.SkipSubtitle {
+			files = append(files, models.FileDetail{Name: "subtitle", Label: "字幕", Status: "pending"})
+		}
+	}
+	return models.FileDetailsData{Files: files}
+}
+
+// getVideoSourceInfo 获取视频的源信息
+func (dm *DownloadManager) getVideoSourceInfo(video *models.Video) (sourceType string, sourceID uint, sourceName string) {
+	if video.FavoriteID != nil {
+		sourceType = "favorite"
+		sourceID = *video.FavoriteID
+		var fav models.Favorite
+		if dm.db.First(&fav, sourceID).Error == nil {
+			sourceName = fav.Name
+		}
+	} else if video.CollectionID != nil {
+		sourceType = "collection"
+		sourceID = *video.CollectionID
+		var col models.Collection
+		if dm.db.First(&col, sourceID).Error == nil {
+			sourceName = col.Name
+		}
+	} else if video.SubmissionID != nil {
+		sourceType = "submission"
+		sourceID = *video.SubmissionID
+		var sub models.Submission
+		if dm.db.First(&sub, sourceID).Error == nil {
+			sourceName = sub.Name
+		}
+	} else if video.WatchLaterID != nil {
+		sourceType = "watch_later"
+		sourceID = *video.WatchLaterID
+		var wl models.WatchLater
+		if dm.db.First(&wl, sourceID).Error == nil {
+			sourceName = wl.Name
+		}
+	}
+	return
+}
+
+// updateDownloadRecordProgress 更新下载记录中的文件进度
+func (dm *DownloadManager) updateDownloadRecordProgress(videoID uint, taskName string, progress *SubTaskProgress) {
+	var record models.DownloadRecord
+	if err := dm.db.Where("video_id = ? AND status IN ?", videoID, []string{"pending", "downloading"}).
+		Order("created_at DESC").First(&record).Error; err != nil {
+		return
+	}
+
+	var details models.FileDetailsData
+	if err := json.Unmarshal(record.FileDetails, &details); err != nil {
+		return
+	}
+
+	updated := false
+	for i := range details.Files {
+		if details.Files[i].Name == taskName {
+			details.Files[i].Status = string(progress.Status)
+			details.Files[i].Progress = progress.Progress
+			details.Files[i].Size = progress.DownloadedSize
+			updated = true
+			break
+		}
+	}
+
+	if !updated {
+		return
+	}
+
+	detailsJSON, _ := json.Marshal(details)
+
+	now := time.Now()
+	updates := map[string]interface{}{
+		"file_details": detailsJSON,
+		"status":       "downloading",
+	}
+	if record.StartedAt == nil {
+		updates["started_at"] = now
+	}
+
+	dm.db.Model(&record).Updates(updates)
+
+	// 通过事件推送进度
+	dm.emitEvent(ManagerEvent{
+		Type:      "download_record_progress",
+		Message:   taskName,
+		Timestamp: now,
+		Task:      &DownloadTask{RecordID: record.ID},
+		Progress:  progress,
+	})
 }

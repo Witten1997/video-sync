@@ -49,6 +49,7 @@ type DownloadTask struct {
 	Priority    TaskPriority       `json:"priority"`     // 优先级
 	Video       *models.Video      `json:"video"`        // 视频信息
 	Page        *models.Page       `json:"page"`         // 分P信息（仅分P任务）
+	RecordID    uint               `json:"record_id,omitempty"` // 关联的下载记录ID
 	OutputDir   string             `json:"output_dir"`   // 输出目录
 	RetryCount  int                `json:"retry_count"`  // 重试次数
 	MaxRetries  int                `json:"max_retries"`  // 最大重试次数
