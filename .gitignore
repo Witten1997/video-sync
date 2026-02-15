@@ -93,3 +93,6 @@ scripts/*.sh
 /CLAUDE.md
 
 /docs/node_modules
+
+# Worktrees
+.worktrees/
