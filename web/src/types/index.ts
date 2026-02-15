@@ -284,3 +284,30 @@ export interface ApiResponse<T = any> {
   message: string
   data: T
 }
+
+// 下载记录文件详情
+export interface FileDetail {
+  name: string
+  label: string
+  status: 'pending' | 'downloading' | 'completed' | 'failed' | 'skipped'
+  size: number
+  progress: number
+}
+
+// 下载记录
+export interface DownloadRecord {
+  id: number
+  video_id: number
+  sync_log_id: number | null
+  source_type: string
+  source_id: number
+  source_name: string
+  status: 'pending' | 'downloading' | 'completed' | 'failed'
+  file_details: { files: FileDetail[] }
+  error_message: string
+  started_at: string | null
+  completed_at: string | null
+  created_at: string
+  updated_at: string
+  video: Video
+}

@@ -150,6 +150,15 @@ func (s *Server) setupRouter() {
 			videos.GET("/:id/pages", s.handleGetVideoPages)
 		}
 
+		// 下载记录
+		downloadRecords := api.Group("/download-records")
+		{
+			downloadRecords.GET("", s.handleListDownloadRecords)
+			downloadRecords.GET("/:id", s.handleGetDownloadRecord)
+			downloadRecords.POST("/:id/retry", s.handleRetryDownloadRecord)
+			downloadRecords.DELETE("/:id", s.handleDeleteDownloadRecord)
+		}
+
 		// 图片代理（用于解决B站防盗链问题）
 		api.GET("/image-proxy", s.handleImageProxy)
 
@@ -208,8 +217,42 @@ func (s *Server) Start() error {
 
 	// 监听下载管理器事件，推送到 WebSocket
 	s.downloadMgr.AddEventHandler(func(event downloader.ManagerEvent) {
+		// 下载记录进度事件
+		if event.Type == "download_record_progress" && event.Task != nil && event.Progress != nil {
+			s.websocketHub.Broadcast(WebSocketMessage{
+				Type: "download_progress",
+				Data: gin.H{
+					"record_id": event.Task.RecordID,
+					"file_name": event.Message,
+					"status":    event.Progress.Status,
+					"progress":  event.Progress.Progress,
+					"speed":     event.Progress.Speed,
+					"size":      event.Progress.DownloadedSize,
+				},
+				Timestamp: event.Timestamp,
+			})
+			return
+		}
+
+		// 任务完成/失败时推送下载记录状态变更
+		if (event.Type == downloader.EventTaskCompleted || event.Type == downloader.EventTaskFailed) && event.Task != nil && event.Task.RecordID > 0 {
+			status := "completed"
+			if event.Type == downloader.EventTaskFailed {
+				status = "failed"
+			}
+			s.websocketHub.Broadcast(WebSocketMessage{
+				Type: "download_status",
+				Data: gin.H{
+					"record_id": event.Task.RecordID,
+					"status":    status,
+				},
+				Timestamp: event.Timestamp,
+			})
+		}
+
+		// 原有的通用事件推送
 		s.websocketHub.Broadcast(WebSocketMessage{
-			Type:      "download_event",
+			Type:      string(event.Type),
 			Data:      event,
 			Timestamp: time.Now(),
 		})

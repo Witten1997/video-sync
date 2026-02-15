@@ -38,6 +38,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '视频详情', hidden: true }
       },
       {
+        path: 'download-records',
+        name: 'DownloadRecords',
+        component: () => import('@/views/DownloadRecords.vue'),
+        meta: { title: '下载管理', icon: 'Download', materialIcon: 'download' }
+      },
+      {
         path: 'tasks',
         name: 'TaskManager',
         component: () => import('@/views/TaskManager.vue'),
