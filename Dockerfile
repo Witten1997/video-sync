@@ -24,10 +24,10 @@ RUN npx vite build
 # ============================================
 # 阶段 2: 构建后端
 # ============================================
-FROM golang:1.23-alpine AS backend-builder
+FROM golang:1.24-alpine AS backend-builder
 
 # 设置 Go 代理
-ENV GOPROXY=https://goproxy.io,direct
+ENV GOPROXY=https://goproxy.cn,direct
 
 WORKDIR /app
 
@@ -179,13 +179,6 @@ if [ -d "/app/migrations" ]; then
     done
     echo "数据库迁移完成"
 fi
-
-# 更新配置文件中的数据库连接信息
-sed -i "s/host: .*/host: ${DB_HOST:-postgres}/g" /app/configs/config.yaml
-sed -i "s/user: .*/user: ${POSTGRES_USER:-video_sync}/g" /app/configs/config.yaml
-sed -i "s/password: .*/password: ${POSTGRES_PASSWORD:-video_sync}/g" /app/configs/config.yaml
-sed -i "s/dbname: .*/dbname: ${POSTGRES_DB:-video_sync}/g" /app/configs/config.yaml
-sed -i "s/port: .*/port: ${DB_PORT:-5432}/g" /app/configs/config.yaml
 
 # 确保目录权限正确
 chmod -R 755 /downloads /metadata /var/log/bili-sync

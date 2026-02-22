@@ -87,12 +87,8 @@ func Migrate(db *gorm.DB) error {
 		return err
 	}
 
-	// 配置 migrator 使其更宽容
-	// 使用事务来确保迁移的原子性，但允许某些操作失败
-	migrator := db.Migrator()
-
 	// 依次迁移每个模型，单独处理错误
-	models := []interface{}{
+	allModels := []interface{}{
 		&models.Video{},
 		&models.Page{},
 		&models.Favorite{},
@@ -102,11 +98,24 @@ func Migrate(db *gorm.DB) error {
 		&models.DownloadRecord{},
 	}
 
-	for _, model := range models {
+	// 禁用外键约束迁移，避免级联关联表时触发约束错误
+	// 迁移 session 使用 Silent 日志，避免 GORM 内部 DROP CONSTRAINT 失败时输出 ERROR 日志
+	migrateDB := db.Session(&gorm.Session{
+		Logger: logger.Default.LogMode(logger.Silent),
+	})
+	migrateDB.Config.DisableForeignKeyConstraintWhenMigrating = true
+	migrator := migrateDB.Migrator()
+
+	for _, model := range allModels {
 		if err := migrator.AutoMigrate(model); err != nil {
-			// 检查是否是约束不存在的错误
+			// 约束不存在的错误可能来自关联模型的级联迁移，不应跳过当前模型
 			if isConstraintNotExistsError(err) {
-				// 忽略这类错误，继续迁移
+				// 检查当前模型的表是否已创建，未创建则补建
+				if !migrator.HasTable(model) {
+					if createErr := migrator.CreateTable(model); createErr != nil {
+						return fmt.Errorf("AutoMigrate %T failed: %v, CreateTable also failed: %v", model, err, createErr)
+					}
+				}
 				continue
 			}
 			return err

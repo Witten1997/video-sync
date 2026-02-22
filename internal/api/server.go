@@ -157,6 +157,7 @@ func (s *Server) setupRouter() {
 			downloadRecords.GET("/:id", s.handleGetDownloadRecord)
 			downloadRecords.POST("/:id/retry", s.handleRetryDownloadRecord)
 			downloadRecords.DELETE("/:id", s.handleDeleteDownloadRecord)
+			downloadRecords.POST("/batch-delete", s.handleBatchDeleteDownloadRecords)
 		}
 
 		// 图片代理（用于解决B站防盗链问题）
@@ -217,6 +218,16 @@ func (s *Server) Start() error {
 
 	// 监听下载管理器事件，推送到 WebSocket
 	s.downloadMgr.AddEventHandler(func(event downloader.ManagerEvent) {
+		// 新下载记录创建事件
+		if event.Type == downloader.EventRecordCreated && event.Record != nil {
+			s.websocketHub.Broadcast(WebSocketMessage{
+				Type:      "download_record_created",
+				Data:      event.Record,
+				Timestamp: event.Timestamp,
+			})
+			return
+		}
+
 		// 下载记录进度事件
 		if event.Type == "download_record_progress" && event.Task != nil && event.Progress != nil {
 			s.websocketHub.Broadcast(WebSocketMessage{

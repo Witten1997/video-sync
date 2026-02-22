@@ -39,7 +39,16 @@
 
     <!-- 表格 -->
     <el-card>
-      <el-table :data="records" v-loading="loading" style="width: 100%;">
+      <div v-if="selectedIds.length > 0" style="margin-bottom: 12px; display: flex; align-items: center; gap: 12px;">
+        <span style="font-size: 13px; color: #64748b;">已选 {{ selectedIds.length }} 项</span>
+        <el-popconfirm :title="`确定删除选中的 ${selectedIds.length} 条记录？`" @confirm="handleBatchDelete">
+          <template #reference>
+            <el-button type="danger" size="small">批量删除</el-button>
+          </template>
+        </el-popconfirm>
+      </div>
+      <el-table :data="records" v-loading="loading" style="width: 100%;" @selection-change="handleSelectionChange">
+        <el-table-column type="selection" width="45" />
         <el-table-column label="视频" min-width="280">
           <template #default="{ row }">
             <div style="display: flex; align-items: center; gap: 12px;">
@@ -113,12 +122,13 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { getDownloadRecords, retryDownloadRecord, deleteDownloadRecord } from '@/api/download-records'
+import { getDownloadRecords, getDownloadRecord, retryDownloadRecord, deleteDownloadRecord, batchDeleteDownloadRecords } from '@/api/download-records'
 import SegmentedProgress from '@/components/SegmentedProgress.vue'
 import type { DownloadRecord } from '@/types'
 
 const records = ref<DownloadRecord[]>([])
 const loading = ref(false)
+const selectedIds = ref<number[]>([])
 const filters = reactive({ status: '', source_type: '', keyword: '' })
 const pagination = reactive({ page: 1, pageSize: 20, total: 0 })
 let ws: WebSocket | null = null
@@ -150,6 +160,17 @@ const handleDelete = async (row: DownloadRecord) => {
   loadRecords()
 }
 
+const handleSelectionChange = (rows: DownloadRecord[]) => {
+  selectedIds.value = rows.map(r => r.id)
+}
+
+const handleBatchDelete = async () => {
+  await batchDeleteDownloadRecords(selectedIds.value)
+  ElMessage.success('批量删除成功')
+  selectedIds.value = []
+  loadRecords()
+}
+
 const getStatusType = (status: string) => {
   const map: Record<string, string> = { pending: 'info', downloading: '', completed: 'success', failed: 'danger' }
   return map[status] || 'info'
@@ -170,10 +191,19 @@ const connectWebSocket = () => {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
   ws = new WebSocket(`${protocol}//${window.location.host}/api/ws`)
 
-  ws.onmessage = (event) => {
+  ws.onmessage = async (event) => {
     try {
       const msg = JSON.parse(event.data)
-      if (msg.type === 'download_progress') {
+      if (msg.type === 'download_record_created') {
+        const { id } = msg.data
+        if (id && !records.value.find(r => r.id === id)) {
+          try {
+            const record = await getDownloadRecord(id)
+            records.value.unshift(record)
+            pagination.total++
+          } catch (e) {}
+        }
+      } else if (msg.type === 'download_progress') {
         const { record_id, file_name, status, progress, size } = msg.data
         const record = records.value.find(r => r.id === record_id)
         if (record?.file_details?.files) {
@@ -194,7 +224,7 @@ const connectWebSocket = () => {
           record.status = status
           if (status === 'completed') {
             record.file_details.files.forEach(f => {
-              if (f.status === 'downloading') {
+              if (f.status !== 'failed' && f.status !== 'skipped') {
                 f.status = 'completed'
                 f.progress = 100
               }

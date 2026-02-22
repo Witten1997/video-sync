@@ -157,3 +157,21 @@ func (s *Server) handleDeleteDownloadRecord(c *gin.Context) {
 
 	respondSuccess(c, gin.H{"message": "删除成功"})
 }
+
+// handleBatchDeleteDownloadRecords 批量删除下载记录
+func (s *Server) handleBatchDeleteDownloadRecords(c *gin.Context) {
+	var req struct {
+		IDs []uint `json:"ids" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil || len(req.IDs) == 0 {
+		respondValidationError(c, "请提供要删除的记录ID")
+		return
+	}
+
+	if err := s.db.Delete(&models.DownloadRecord{}, req.IDs).Error; err != nil {
+		respondInternalError(c, err)
+		return
+	}
+
+	respondSuccess(c, gin.H{"message": "批量删除成功", "count": len(req.IDs)})
+}

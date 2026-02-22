@@ -183,16 +183,27 @@ func (d *Downloader) downloadPageVideo(ctx context.Context, video *models.Video,
 		ExtraArgs:      d.config.Advanced.YtdlpExtraArgs,
 	}
 
-	// 进度回调
+	// 进度回调 - 累加多个流（视频流+音频流）的大小
+	var completedStreamSize int64
+	var lastStreamTotal int64
 	progressCallback := func(progress *ProgressInfo) {
+		// 当新流开始时（totalBytes 变小），累加上一个流的大小
+		currentTotal := progress.TotalBytes
+		if currentTotal == 0 {
+			currentTotal = progress.TotalBytesEst
+		}
+		if currentTotal > 0 && lastStreamTotal > 0 && currentTotal < lastStreamTotal/2 {
+			completedStreamSize += lastStreamTotal
+		}
+		if currentTotal > 0 {
+			lastStreamTotal = currentTotal
+		}
+
 		pageProgress.UpdateSubTask("video", func(task *SubTaskProgress) {
 			task.Progress = progress.Percentage
 			task.Speed = progress.Speed
-			task.DownloadedSize = progress.DownloadedBytes
-			task.TotalSize = progress.TotalBytes
-			if task.TotalSize == 0 {
-				task.TotalSize = progress.TotalBytesEst
-			}
+			task.DownloadedSize = completedStreamSize + progress.DownloadedBytes
+			task.TotalSize = completedStreamSize + currentTotal
 			task.ETA = progress.ETA
 		})
 
@@ -218,6 +229,7 @@ func (d *Downloader) downloadPageVideo(ctx context.Context, video *models.Video,
 		task.Progress = 100
 		task.EndTime = time.Now()
 	})
+	d.tracker.NotifyProgress(video.ID, page.PID, "video", pageProgress.GetSubTask("video"))
 
 	utils.Info("视频下载完成: %s [BV%s] P%d", video.Name, video.BVid, page.PID)
 	return nil
@@ -411,6 +423,7 @@ func (d *Downloader) downloadPoster(ctx context.Context, video *models.Video, pa
 		task.DownloadedSize = written
 		task.TotalSize = written
 	})
+	d.tracker.NotifyProgress(video.ID, page.PID, "poster", pageProgress.GetSubTask("poster"))
 
 	utils.Info("封面下载完成: %s (%.2f KB)", posterPath, float64(written)/1024)
 	return nil
@@ -452,6 +465,7 @@ func (d *Downloader) downloadSubtitles(ctx context.Context, video *models.Video,
 		task.Status = StatusSucceeded
 		task.Progress = 100
 	})
+	d.tracker.NotifyProgress(video.ID, page.PID, "subtitle", pageProgress.GetSubTask("subtitle"))
 	return nil
 }
 
@@ -526,6 +540,7 @@ func (d *Downloader) downloadDanmaku(ctx context.Context, video *models.Video, p
 		task.Status = StatusSucceeded
 		task.Progress = 100
 	})
+	d.tracker.NotifyProgress(video.ID, page.PID, "danmaku", pageProgress.GetSubTask("danmaku"))
 
 	utils.Info("弹幕下载完成: %s (共 %d 条)", danmakuPath, len(danmakuResp.Danmakus))
 	return nil
@@ -666,6 +681,7 @@ func (d *Downloader) generateNFO(ctx context.Context, video *models.Video, page 
 		task.Status = StatusSucceeded
 		task.Progress = 100
 	})
+	d.tracker.NotifyProgress(video.ID, page.PID, "nfo", pageProgress.GetSubTask("nfo"))
 
 	utils.Info("NFO生成完成: %s", nfoPath)
 	return nil

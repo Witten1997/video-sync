@@ -25,6 +25,21 @@
         <el-option label="UP主投稿" value="submission" />
         <el-option label="URL下载" value="url" />
       </el-select>
+      <el-select
+        v-model="sortBy"
+        style="width: 140px"
+        @change="handleSearch"
+      >
+        <el-option label="创建时间" value="created_at" />
+        <el-option label="标题名称" value="name" />
+        <el-option label="发布时间" value="pubtime" />
+      </el-select>
+      <el-button
+        :icon="Sort"
+        circle
+        :title="sortOrder === 'desc' ? '降序' : '升序'"
+        @click="toggleSortOrder"
+      />
       <el-button
         v-if="selectedVideos.length > 0"
         type="primary"
@@ -278,7 +293,7 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Search, Link, List, Grid, VideoPlay, View, Download, Delete, Refresh, Picture } from '@element-plus/icons-vue'
+import { Search, Link, List, Grid, VideoPlay, View, Download, Delete, Refresh, Picture, Sort } from '@element-plus/icons-vue'
 import { getVideos, deleteVideo, redownloadVideo, downloadVideoByURL, getVideoPages } from '@/api/video'
 import { getProxiedImageUrl } from '@/utils/image'
 import type { Video } from '@/types'
@@ -299,7 +314,8 @@ const pageSize = ref(20)
 const total = ref(0)
 const viewMode = ref<'list' | 'grid'>('grid')
 const selectedVideos = ref<Video[]>([])
-
+const sortBy = ref('created_at')
+const sortOrder = ref('desc')
 // URL下载对话框
 const downloadDialogVisible = ref(false)
 const downloadLoading = ref(false)
@@ -353,7 +369,9 @@ const loadData = async () => {
       page: currentPage.value,
       page_size: pageSize.value,
       keyword: searchKeyword.value,
-      source_type: filterSourceType.value
+      source_type: filterSourceType.value,
+      sort_by: sortBy.value,
+      sort_order: sortOrder.value
     })
     videos.value = result.items || []
     total.value = result.total
@@ -366,6 +384,13 @@ const loadData = async () => {
 
 // 搜索
 const handleSearch = () => {
+  currentPage.value = 1
+  loadData()
+}
+
+// 切换排序方向
+const toggleSortOrder = () => {
+  sortOrder.value = sortOrder.value === 'desc' ? 'asc' : 'desc'
   currentPage.value = 1
   loadData()
 }

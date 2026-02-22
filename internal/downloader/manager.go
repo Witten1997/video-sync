@@ -29,15 +29,17 @@ const (
 	EventTaskCancelled ManagerEventType = "task_cancelled"
 	EventTaskRetrying  ManagerEventType = "task_retrying"
 	EventTaskProgress  ManagerEventType = "task_progress"
+	EventRecordCreated ManagerEventType = "download_record_created"
 )
 
 // ManagerEvent 管理器事件
 type ManagerEvent struct {
-	Type      ManagerEventType `json:"type"`
-	Task      *DownloadTask    `json:"task"`
-	Progress  *SubTaskProgress `json:"progress,omitempty"`
-	Message   string           `json:"message,omitempty"`
-	Timestamp time.Time        `json:"timestamp"`
+	Type      ManagerEventType       `json:"type"`
+	Task      *DownloadTask          `json:"task"`
+	Progress  *SubTaskProgress       `json:"progress,omitempty"`
+	Message   string                 `json:"message,omitempty"`
+	Timestamp time.Time              `json:"timestamp"`
+	Record    *models.DownloadRecord `json:"record,omitempty"`
 }
 
 // EventHandler 事件处理器
@@ -335,11 +337,26 @@ func (dm *DownloadManager) executeVideoTask(task *DownloadTask) {
 	// 更新下载记录为完成
 	if dm.db != nil && task.RecordID > 0 {
 		now := time.Now()
-		dm.db.Model(&models.DownloadRecord{}).Where("id = ?", task.RecordID).
-			Updates(map[string]interface{}{
-				"status":       "completed",
-				"completed_at": now,
-			})
+		// 将所有仍为 pending/downloading 的文件标记为 completed
+		var record models.DownloadRecord
+		if dm.db.First(&record, task.RecordID).Error == nil {
+			var details models.FileDetailsData
+			if json.Unmarshal(record.FileDetails, &details) == nil {
+				for i := range details.Files {
+					if details.Files[i].Status == "pending" || details.Files[i].Status == "downloading" {
+						details.Files[i].Status = "succeeded"
+						details.Files[i].Progress = 100
+					}
+				}
+				if detailsJSON, err := json.Marshal(details); err == nil {
+					dm.db.Model(&record).Updates(map[string]interface{}{
+						"file_details": detailsJSON,
+						"status":       "completed",
+						"completed_at": now,
+					})
+				}
+			}
+		}
 	}
 
 	// 更新数据库中的视频下载状态
@@ -530,6 +547,13 @@ func (dm *DownloadManager) PrepareAndAddVideoTask(video *models.Video, baseDir s
 			utils.Warn("创建下载记录失败: %v", err)
 		} else {
 			task.RecordID = record.ID
+			record.Video = videoWithPages
+			dm.emitEvent(ManagerEvent{
+				Type:      EventRecordCreated,
+				Task:      task,
+				Record:    record,
+				Timestamp: time.Now(),
+			})
 		}
 	}
 

@@ -50,16 +50,10 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '任务管理', icon: 'List', materialIcon: 'assignment' }
       },
       {
-        path: 'sync-logs',
-        name: 'SyncLogs',
-        component: () => import('@/views/SyncLogs.vue'),
-        meta: { title: '同步日志', icon: 'Clock', materialIcon: 'sync', section: '系统管理' }
-      },
-      {
         path: 'config',
         name: 'Config',
         component: () => import('@/views/Config.vue'),
-        meta: { title: '配置', icon: 'Setting', materialIcon: 'settings' }
+        meta: { title: '配置', icon: 'Setting', materialIcon: 'settings', section: '系统管理' }
       },
       {
         path: 'logs',

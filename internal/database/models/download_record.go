@@ -23,7 +23,7 @@ type DownloadRecord struct {
 	UpdatedAt    time.Time      `json:"updated_at"`
 
 	// 关联
-	Video Video `gorm:"foreignKey:VideoID;constraint:OnDelete:CASCADE" json:"video,omitempty"`
+	Video Video `gorm:"foreignKey:VideoID" json:"video,omitempty"`
 }
 
 func (DownloadRecord) TableName() string {

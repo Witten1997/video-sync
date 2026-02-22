@@ -170,11 +170,17 @@ func loadEnvOverrides(cfg *Config) {
 	}
 	if user := os.Getenv("DB_USER"); user != "" {
 		cfg.Database.User = user
+	} else if user := os.Getenv("POSTGRES_USER"); user != "" {
+		cfg.Database.User = user
 	}
 	if password := os.Getenv("DB_PASSWORD"); password != "" {
 		cfg.Database.Password = password
+	} else if password := os.Getenv("POSTGRES_PASSWORD"); password != "" {
+		cfg.Database.Password = password
 	}
 	if dbname := os.Getenv("DB_NAME"); dbname != "" {
+		cfg.Database.DBName = dbname
+	} else if dbname := os.Getenv("POSTGRES_DB"); dbname != "" {
 		cfg.Database.DBName = dbname
 	}
 	if sslmode := os.Getenv("DB_SSLMODE"); sslmode != "" {

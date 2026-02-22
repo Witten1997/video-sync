@@ -7,6 +7,8 @@ export const getVideos = (params?: PageParams & {
   source_type?: string
   status?: string
   keyword?: string
+  sort_by?: string
+  sort_order?: string
 }) => {
   return http.get<PageResponse<Video>>('/videos', { params })
 }

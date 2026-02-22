@@ -22,3 +22,7 @@ export const retryDownloadRecord = (id: number) => {
 export const deleteDownloadRecord = (id: number) => {
   return http.delete<void>(`/download-records/${id}`)
 }
+
+export const batchDeleteDownloadRecords = (ids: number[]) => {
+  return http.post<void>('/download-records/batch-delete', { ids })
+}

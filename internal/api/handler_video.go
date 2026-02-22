@@ -78,6 +78,24 @@ func (s *Server) handleListVideos(c *gin.Context) {
 		return
 	}
 
+	// 排序
+	sortBy := c.DefaultQuery("sort_by", "created_at")
+	sortOrder := c.DefaultQuery("sort_order", "desc")
+	// 白名单校验
+	allowedSortFields := map[string]string{
+		"name":       "name",
+		"created_at": "created_at",
+		"pubtime":    "pubtime",
+	}
+	sortColumn, ok := allowedSortFields[sortBy]
+	if !ok {
+		sortColumn = "created_at"
+	}
+	if sortOrder != "asc" {
+		sortOrder = "desc"
+	}
+	query = query.Order(sortColumn + " " + sortOrder)
+
 	// 分页查询
 	var videos []models.Video
 	offset := (page - 1) * pageSize

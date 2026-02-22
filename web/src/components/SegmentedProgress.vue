@@ -38,9 +38,11 @@ const segmentWidth = computed(() => {
 const getStatusClass = (status: string) => {
   switch (status) {
     case 'downloading': return 'fill-blue'
-    case 'completed': return 'fill-green'
+    case 'completed':
+    case 'succeeded': return 'fill-green'
     case 'failed': return 'fill-red'
     case 'skipped': return 'fill-gray'
+    case 'pending': return 'fill-blue'
     default: return 'fill-gray'
   }
 }
@@ -50,6 +52,7 @@ const getTooltip = (file: FileDetail) => {
     pending: '等待中',
     downloading: '下载中',
     completed: '已完成',
+    succeeded: '已完成',
     failed: '失败',
     skipped: '已跳过'
   }
