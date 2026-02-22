@@ -172,7 +172,6 @@
 #### 客户端
 
 - [ ]  移动端 Web 界面优化
-- [ ]  桌面端应用（Electron）
 
 #### 性能与优化
 
@@ -187,34 +186,29 @@
 
 ## 项目预览
 
-### 仪表盘
+### 控制台
 
-![仪表盘](img/img.png)
+![image1.png](assets/image1.png)
 
 ### 快捷订阅
 
-![快捷订阅-1](img/img_1.png)
-![快捷订阅-2](img/img_2.png)
+![image.png](assets/image.png)
 
 ### 任务源管理
 
-![任务源管理](img/img_3.png)
+![image2.png](assets/image2.png)
 
 ### 视频列表
 
-![视频列表](img/img_4.png)
+![image3.png](assets/image3.png)
 
 ### 任务管理
 
-![任务管理](img/img_5.png)
+![image4.png](assets/image4.png)
 
-### 配置中心
+### 下载管理
 
-![配置-1](img/img_8.png)
-![配置-2](img/img_9.png)
-![配置-3](img/img_10.png)
-![配置-4](img/img_11.png)
-![配置-5](img/img_12.png)
+![image5.png](assets/image5.png)
 
 ---
 
@@ -222,7 +216,7 @@
 
 ### 后端
 
-- **语言**: Go 1.23.3+
+- **语言**: Go 1.24.3+
 - **框架**: Gin (HTTP Server)
 - **数据库**: PostgreSQL 16+ with GORM
 - **配置**: Viper
@@ -248,24 +242,110 @@
 
 ### 方式一：Docker Compose（推荐）
 
-适合快速部署和生产环境使用。
+**1. 创建项目目录**
 
 ```bash
-# 1. 克隆仓库
-git clone https://github.com/your-org/video-sync.git
-cd video-sync
-
-# 2. 启动服务（包含应用和数据库）
-docker-compose up -d
-
-# 3. 查看日志
-docker-compose logs -f app
-
-# 4. 访问 Web 界面
-# 浏览器打开: http://localhost:8080
+mkdir video-sync && cd video-sync
+mkdir -p configs downloads metadata logs
 ```
 
-首次启动后，访问配置页面使用扫码登录即可。
+**2. 创建 `docker-compose.yml`**
+
+```yaml
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: video-sync-postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=your_password
+      - POSTGRES_DB=video_sync
+      - TZ=Asia/Shanghai
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d video_sync"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - video-sync-network
+
+  app:
+    image: witten888/video-sync:latest
+    container_name: video-sync
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      - TZ=Asia/Shanghai
+      # 数据库连接（如已在 configs/config.yaml 中配置，以下可省略）
+      - DB_HOST=postgres
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=your_password
+      - POSTGRES_DB=video_sync
+    ports:
+      - "21001:80"
+    volumes:
+      - ./configs:/app/configs
+      - ./downloads:/downloads
+      - ./metadata:/metadata
+      - ./logs:/var/log/bili-sync
+    networks:
+      - video-sync-network
+
+networks:
+  video-sync-network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+    driver: local
+```
+
+**3. 创建配置文件 `configs/config.yaml`**
+
+```yaml
+server:
+  bind_address: "0.0.0.0:8080"
+
+database:
+  host: "postgres"
+  port: 5432
+  user: "postgres"
+  password: "your_password"
+  dbname: "video_sync"
+  sslmode: "disable"
+
+paths:
+  download_base: "/downloads/bilibili"
+  upper_path: "/metadata/people"
+
+quality:
+  max_resolution: "1080P+"
+  codec_priority:
+    - "AVC"
+    - "HEVC"
+    - "AV1"
+
+logging:
+  level: "info"
+  file: "/var/log/bili-sync/app.log"
+```
+
+> 完整配置项参考 [configs/config.example.yaml](configs/config.example.yaml)。
+> 数据库连接支持两种方式：在 `configs/config.yaml` 中配置，或通过 `docker-compose.yml` 的 `environment` 设置环境变量。环境变量优先级更高。
+
+**4. 启动服务**
+
+```bash
+docker compose up -d
+```
+
+启动后访问 `http://your-ip:21001`，在配置页面扫码登录即可。
 
 ### 方式二：从源码构建
 
