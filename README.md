@@ -345,7 +345,7 @@ logging:
 docker compose up -d
 ```
 
-启动后访问 `http://your-ip:21001`，在配置页面扫码登录即可。
+启动后访问 `http://your-ip:21001`，默认用户名密码为 `admin/admin123` ，登录后自行修改。
 
 ### 方式二：从源码构建
 
