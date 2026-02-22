@@ -1,3 +1,11 @@
+// 用户
+export interface User {
+  id: number
+  username: string
+  created_at: string
+  updated_at: string
+}
+
 // 视频源类型
 export type VideoSourceType = 'favorite' | 'watch_later' | 'collection' | 'submission'
 

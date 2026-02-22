@@ -96,6 +96,7 @@ func Migrate(db *gorm.DB) error {
 		&models.Collection{},
 		&models.Submission{},
 		&models.DownloadRecord{},
+		&models.User{},
 	}
 
 	// 禁用外键约束迁移，避免级联关联表时触发约束错误

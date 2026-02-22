@@ -3,6 +3,12 @@ import type { RouteRecordRaw } from 'vue-router'
 
 const routes: RouteRecordRaw[] = [
   {
+    path: '/login',
+    name: 'Login',
+    component: () => import('@/views/Login.vue'),
+    meta: { title: '登录', hidden: true, public: true }
+  },
+  {
     path: '/',
     component: () => import('@/layouts/MainLayout.vue'),
     redirect: '/dashboard',
@@ -50,10 +56,16 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '任务管理', icon: 'List', materialIcon: 'assignment' }
       },
       {
+        path: 'users',
+        name: 'Users',
+        component: () => import('@/views/Users.vue'),
+        meta: { title: '用户管理', icon: 'User', materialIcon: 'group', section: '系统管理' }
+      },
+      {
         path: 'config',
         name: 'Config',
         component: () => import('@/views/Config.vue'),
-        meta: { title: '配置', icon: 'Setting', materialIcon: 'settings', section: '系统管理' }
+        meta: { title: '配置', icon: 'Setting', materialIcon: 'settings' }
       },
       {
         path: 'logs',
@@ -68,6 +80,17 @@ const routes: RouteRecordRaw[] = [
 const router = createRouter({
   history: createWebHistory(),
   routes
+})
+
+router.beforeEach((to, _from, next) => {
+  const token = localStorage.getItem('auth_token')
+  if (!to.meta?.public && !token) {
+    next('/login')
+  } else if (to.path === '/login' && token) {
+    next('/')
+  } else {
+    next()
+  }
 })
 
 export default router

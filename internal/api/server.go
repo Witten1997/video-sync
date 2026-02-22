@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	"bili-download/internal/auth"
 	"bili-download/internal/bilibili"
 	"bili-download/internal/config"
 	"bili-download/internal/downloader"
@@ -74,15 +75,16 @@ func (s *Server) setupRouter() {
 	}))
 
 	// 鉴权中间件
-	if s.config.Server.AuthToken != "" {
-		router.Use(s.authMiddleware())
-	}
+	router.Use(s.authMiddleware())
 
 	// API 路由组
 	api := router.Group("/api")
 	{
 		// 健康检查
 		api.GET("/health", s.handleHealth)
+
+		// 登录（公开接口）
+		api.POST("/auth/login", s.handleLogin)
 
 		// 仪表盘
 		api.GET("/dashboard", s.handleDashboard)
@@ -96,6 +98,17 @@ func (s *Server) setupRouter() {
 		{
 			auth.GET("/qrcode/generate", s.handleQRCodeGenerate) // 生成二维码
 			auth.GET("/qrcode/poll", s.handleQRCodePoll)         // 轮询二维码状态
+		}
+
+		// 用户管理
+		users := api.Group("/users")
+		{
+			users.GET("", s.handleListUsers)
+			users.POST("", s.handleCreateUser)
+			users.GET("/me", s.handleGetCurrentUser)
+			users.PUT("/me/password", s.handleChangePassword)
+			users.PUT("/:id", s.handleUpdateUser)
+			users.DELETE("/:id", s.handleDeleteUser)
 		}
 
 		// yt-dlp 版本管理
@@ -371,11 +384,19 @@ func (s *Server) loggerMiddleware() gin.HandlerFunc {
 	}
 }
 
-// authMiddleware 鉴权中间件
+// authMiddleware JWT 鉴权中间件
 func (s *Server) authMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// 跳过健康检查
-		if c.Request.URL.Path == "/api/health" {
+		path := c.Request.URL.Path
+
+		// 跳过公开接口
+		if path == "/api/health" || path == "/api/auth/login" {
+			c.Next()
+			return
+		}
+
+		// 非 /api 路径不需要鉴权（静态文件等）
+		if len(path) < 4 || path[:4] != "/api" {
 			c.Next()
 			return
 		}
@@ -383,7 +404,6 @@ func (s *Server) authMiddleware() gin.HandlerFunc {
 		// 检查 Authorization header
 		token := c.GetHeader("Authorization")
 		if token == "" {
-			// 检查 query 参数
 			token = c.Query("token")
 		}
 
@@ -392,12 +412,21 @@ func (s *Server) authMiddleware() gin.HandlerFunc {
 			token = token[7:]
 		}
 
-		if token != s.config.Server.AuthToken {
+		if token == "" {
 			respondError(c, http.StatusUnauthorized, "未授权的访问")
 			c.Abort()
 			return
 		}
 
+		claims, err := auth.ParseToken(token)
+		if err != nil {
+			respondError(c, http.StatusUnauthorized, "登录已过期，请重新登录")
+			c.Abort()
+			return
+		}
+
+		c.Set("user_id", claims.UserID)
+		c.Set("username", claims.Username)
 		c.Next()
 	}
 }

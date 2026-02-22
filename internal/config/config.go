@@ -23,6 +23,7 @@ type Config struct {
 type ServerConfig struct {
 	BindAddress string `yaml:"bind_address" mapstructure:"bind_address" json:"bind_address"`
 	AuthToken   string `yaml:"auth_token" mapstructure:"auth_token" json:"auth_token"`
+	JWTSecret   string `yaml:"jwt_secret" mapstructure:"jwt_secret" json:"-"`
 }
 
 // DatabaseConfig 数据库配置

@@ -38,6 +38,13 @@ request.interceptors.response.use(
   },
   (error) => {
     const message = error.response?.data?.message || error.message || '请求失败'
+    if (error.response?.status === 401 && window.location.pathname !== '/login') {
+      localStorage.removeItem('auth_token')
+      localStorage.removeItem('username')
+      localStorage.removeItem('user_id')
+      window.location.href = '/login'
+      return Promise.reject(error)
+    }
     ElMessage.error(message)
     return Promise.reject(error)
   }

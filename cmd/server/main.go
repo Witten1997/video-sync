@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"bili-download/internal/api"
+	"bili-download/internal/auth"
 	"bili-download/internal/bilibili"
 	"bili-download/internal/config"
 	"bili-download/internal/database"
@@ -67,6 +68,14 @@ func main() {
 		log.Fatalf("数据库迁移失败: %v", err)
 	}
 	utils.Info("数据库迁移完成")
+
+	// 初始化 JWT
+	auth.InitJWTSecret(cfg.Server.JWTSecret)
+
+	// 创建默认用户
+	if err := api.SeedDefaultUser(db); err != nil {
+		utils.Warn("创建默认用户失败: %v", err)
+	}
 
 	// 初始化 B站 客户端
 	biliClient := bilibili.NewClient(cfg)

@@ -49,10 +49,10 @@
           </button>
           <div class="flex items-center gap-3 pl-4 border-l border-slate-200">
             <div class="text-right">
-              <p class="text-sm font-semibold text-slate-800">管理员</p>
+              <p class="text-sm font-semibold text-slate-800">{{ authStore.username }}</p>
             </div>
-            <div class="w-9 h-9 bg-primary/10 rounded-full flex items-center justify-center">
-              <span class="material-icons-round text-primary text-[20px]">person</span>
+            <div class="w-9 h-9 bg-primary/10 rounded-full flex items-center justify-center cursor-pointer" @click="authStore.logout()">
+              <span class="material-icons-round text-primary text-[20px]">logout</span>
             </div>
           </div>
         </div>
@@ -79,11 +79,13 @@
 import { computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useTabsStore } from '@/stores/tabs'
+import { useAuthStore } from '@/stores/auth'
 import TabsBar from '@/components/TabsBar.vue'
 
 const route = useRoute()
 const router = useRouter()
 const tabsStore = useTabsStore()
+const authStore = useAuthStore()
 
 watch(
   () => route.path,

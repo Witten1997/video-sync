@@ -6,7 +6,7 @@
 
 一个功能强大的 B 站视频自动化下载与管理工具，支持与 Emby/Jellyfin 等媒体服务器无缝集成
 
-[![Go Version](https://img.shields.io/badge/Go-1.23.3+-00ADD8?style=flat&logo=go)](https://go.dev/)
+[![Go Version](https://img.shields.io/badge/Go-1.24.3+-00ADD8?style=flat&logo=go)](https://go.dev/)
 [![Vue Version](https://img.shields.io/badge/Vue-3.4+-4FC08D?style=flat&logo=vue.js)](https://vuejs.org/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?style=flat&logo=postgresql)](https://www.postgresql.org/)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
