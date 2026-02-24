@@ -36,7 +36,7 @@
     <!-- Main content -->
     <div class="flex-1 flex flex-col overflow-hidden">
       <!-- Header -->
-      <header class="h-16 bg-white/80 backdrop-blur-md border-b border-slate-200 sticky top-0 z-40 px-8 flex items-center justify-between shrink-0">
+      <header class="h-16 bg-white border-b border-slate-200 sticky top-0 z-40 px-8 flex items-center justify-between shrink-0">
         <div class="flex items-center gap-4 flex-1">
           <h2 class="text-lg font-semibold text-slate-800">{{ currentTitle }}</h2>
         </div>

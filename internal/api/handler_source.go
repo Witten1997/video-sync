@@ -36,15 +36,15 @@ func (s *Server) handleListSources(c *gin.Context) {
 	}
 	for _, fav := range favorites {
 		sources = append(sources, gin.H{
-			"id":            fav.ID,
-			"type":          "favorite",
-			"name":          fav.Name,
-			"path":          fav.Path,
-			"f_id":          strconv.FormatInt(fav.FID, 10),
-			"enabled":       fav.Enabled,
-			"latest_row_at": fav.LatestRowAt,
-			"video_count":   len(fav.Videos),
-			"created_at":    fav.CreatedAt,
+			"id":           fav.ID,
+			"type":         "favorite",
+			"name":         fav.Name,
+			"path":         fav.Path,
+			"f_id":         strconv.FormatInt(fav.FID, 10),
+			"enabled":      fav.Enabled,
+			"last_scan_at": fav.LastScanAt,
+			"video_count":  len(fav.Videos),
+			"created_at":   fav.CreatedAt,
 		})
 	}
 
@@ -56,14 +56,14 @@ func (s *Server) handleListSources(c *gin.Context) {
 	}
 	for _, wl := range watchLaters {
 		sources = append(sources, gin.H{
-			"id":            wl.ID,
-			"type":          "watch_later",
-			"name":          wl.Name,
-			"path":          wl.Path,
-			"enabled":       wl.Enabled,
-			"latest_row_at": wl.LatestRowAt,
-			"video_count":   len(wl.Videos),
-			"created_at":    wl.CreatedAt,
+			"id":           wl.ID,
+			"type":         "watch_later",
+			"name":         wl.Name,
+			"path":         wl.Path,
+			"enabled":      wl.Enabled,
+			"last_scan_at": wl.LastScanAt,
+			"video_count":  len(wl.Videos),
+			"created_at":   wl.CreatedAt,
 		})
 	}
 
@@ -75,15 +75,15 @@ func (s *Server) handleListSources(c *gin.Context) {
 	}
 	for _, col := range collections {
 		sources = append(sources, gin.H{
-			"id":            col.ID,
-			"type":          "collection",
-			"name":          col.Name,
-			"path":          col.Path,
-			"cid":           col.CID,
-			"enabled":       col.Enabled,
-			"latest_row_at": col.LatestRowAt,
-			"video_count":   len(col.Videos),
-			"created_at":    col.CreatedAt,
+			"id":           col.ID,
+			"type":         "collection",
+			"name":         col.Name,
+			"path":         col.Path,
+			"cid":          col.CID,
+			"enabled":      col.Enabled,
+			"last_scan_at": col.LastScanAt,
+			"video_count":  len(col.Videos),
+			"created_at":   col.CreatedAt,
 		})
 	}
 
@@ -95,16 +95,16 @@ func (s *Server) handleListSources(c *gin.Context) {
 	}
 	for _, sub := range submissions {
 		sources = append(sources, gin.H{
-			"id":            sub.ID,
-			"type":          "submission",
-			"name":          sub.Name,
-			"path":          sub.Path,
-			"mid":           strconv.FormatInt(sub.UpperID, 10),
-			"upper_id":      sub.UpperID,
-			"enabled":       sub.Enabled,
-			"latest_row_at": sub.LatestRowAt,
-			"video_count":   len(sub.Videos),
-			"created_at":    sub.CreatedAt,
+			"id":           sub.ID,
+			"type":         "submission",
+			"name":         sub.Name,
+			"path":         sub.Path,
+			"mid":          strconv.FormatInt(sub.UpperID, 10),
+			"upper_id":     sub.UpperID,
+			"enabled":      sub.Enabled,
+			"last_scan_at": sub.LastScanAt,
+			"video_count":  len(sub.Videos),
+			"created_at":   sub.CreatedAt,
 		})
 	}
 

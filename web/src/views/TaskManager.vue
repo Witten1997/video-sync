@@ -428,6 +428,7 @@ import {
   getSyncStats
 } from '@/api/scheduler'
 import type { SyncLog, SyncStats, PageParams } from '@/types'
+import { useAuthStore } from '@/stores/auth'
 
 const schedulerControlRef = ref<InstanceType<typeof SchedulerControl>>()
 
@@ -561,9 +562,10 @@ const handleWebSocketMessage = (event: MessageEvent) => {
 // 连接 WebSocket
 const connectWebSocket = () => {
   try {
+    const authStore = useAuthStore()
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
     const host = window.location.host
-    ws = new WebSocket(`${protocol}//${host}/api/ws`)
+    ws = new WebSocket(`${protocol}//${host}/api/ws?token=${encodeURIComponent(authStore.token)}`)
 
     ws.onopen = () => {
       console.log('WebSocket connected')

@@ -231,7 +231,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, computed } from 'vue'
+import { ref, onMounted, onUnmounted, onActivated, onDeactivated, computed } from 'vue'
 import { ElMessage } from 'element-plus'
 import { use } from 'echarts/core'
 import { CanvasRenderer } from 'echarts/renderers'
@@ -467,7 +467,9 @@ onMounted(() => {
   loadDashboardData()
   loadSchedulerStatus()
   loadSystemStats()
+})
 
+onActivated(() => {
   refreshTimer = window.setInterval(() => {
     loadDashboardData()
     loadSchedulerStatus()
@@ -476,6 +478,11 @@ onMounted(() => {
   systemStatsTimer = window.setInterval(() => {
     loadSystemStats()
   }, 3000)
+})
+
+onDeactivated(() => {
+  if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null }
+  if (systemStatsTimer) { clearInterval(systemStatsTimer); systemStatsTimer = null }
 })
 
 onUnmounted(() => {

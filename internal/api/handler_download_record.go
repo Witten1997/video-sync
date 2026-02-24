@@ -93,7 +93,7 @@ func (s *Server) handleRetryDownloadRecord(c *gin.Context) {
 	}
 
 	var record models.DownloadRecord
-	if err := s.db.Preload("Video.Pages").First(&record, id).Error; err != nil {
+	if err := s.db.Preload("Video").First(&record, id).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			respondNotFound(c, "下载记录未找到")
 			return
@@ -102,20 +102,18 @@ func (s *Server) handleRetryDownloadRecord(c *gin.Context) {
 		return
 	}
 
-	if record.Status != "failed" {
-		respondValidationError(c, "只能重试失败的记录")
+	if record.Status != "failed" && record.Status != "completed" {
+		respondValidationError(c, "只能重试失败或已完成的记录")
 		return
 	}
 
-	// 重置失败的文件状态
+	// 重置文件状态
 	var details models.FileDetailsData
 	if err := json.Unmarshal(record.FileDetails, &details); err == nil {
 		for i := range details.Files {
-			if details.Files[i].Status == "failed" {
-				details.Files[i].Status = "pending"
-				details.Files[i].Progress = 0
-				details.Files[i].Size = 0
-			}
+			details.Files[i].Status = "pending"
+			details.Files[i].Progress = 0
+			details.Files[i].Size = 0
 		}
 		if updatedJSON, err := json.Marshal(details); err == nil {
 			record.FileDetails = updatedJSON
@@ -125,11 +123,12 @@ func (s *Server) handleRetryDownloadRecord(c *gin.Context) {
 	// 更新状态
 	record.Status = "pending"
 	record.ErrorMessage = ""
+	record.StartedAt = nil
 	record.CompletedAt = nil
 	s.db.Save(&record)
 
-	// 重新创建下载任务
-	task, err := s.downloadMgr.PrepareAndAddVideoTask(&record.Video, s.config.Paths.DownloadBase, 0, true)
+	// 基于原有记录重试，不创建新记录
+	task, err := s.downloadMgr.RetryVideoTask(record.ID, &record.Video, 0)
 	if err != nil {
 		respondInternalError(c, err)
 		return
@@ -139,6 +138,70 @@ func (s *Server) handleRetryDownloadRecord(c *gin.Context) {
 		"task_id":   task.ID,
 		"record_id": record.ID,
 		"message":   "重试任务已创建",
+	})
+}
+
+// handleRepairDownloadRecords 修复误标记为完成的下载记录
+func (s *Server) handleRepairDownloadRecords(c *gin.Context) {
+	repaired, err := s.downloadMgr.RepairFalseCompletedRecords()
+	if err != nil {
+		respondInternalError(c, err)
+		return
+	}
+
+	respondSuccess(c, gin.H{
+		"repaired": repaired,
+		"message":  "修复完成",
+	})
+}
+
+// handleBatchRetryDownloadRecords 批量重试下载记录
+func (s *Server) handleBatchRetryDownloadRecords(c *gin.Context) {
+	var req struct {
+		IDs []uint `json:"ids" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil || len(req.IDs) == 0 {
+		respondValidationError(c, "请提供要重试的记录ID")
+		return
+	}
+
+	retried := 0
+	for _, id := range req.IDs {
+		var record models.DownloadRecord
+		if err := s.db.Preload("Video").First(&record, id).Error; err != nil {
+			continue
+		}
+		if record.Status != "failed" && record.Status != "completed" {
+			continue
+		}
+
+		// 重置文件状态
+		var details models.FileDetailsData
+		if err := json.Unmarshal(record.FileDetails, &details); err == nil {
+			for i := range details.Files {
+				details.Files[i].Status = "pending"
+				details.Files[i].Progress = 0
+				details.Files[i].Size = 0
+			}
+			if updatedJSON, err := json.Marshal(details); err == nil {
+				record.FileDetails = updatedJSON
+			}
+		}
+
+		record.Status = "pending"
+		record.ErrorMessage = ""
+		record.StartedAt = nil
+		record.CompletedAt = nil
+		s.db.Save(&record)
+
+		if _, err := s.downloadMgr.RetryVideoTask(record.ID, &record.Video, 0); err == nil {
+			retried++
+		}
+	}
+
+	respondSuccess(c, gin.H{
+		"retried": retried,
+		"message": "批量重试完成",
 	})
 }
 

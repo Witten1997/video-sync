@@ -187,7 +187,16 @@ func (cc *ConcurrencyController) UpdateLimits(maxVideos, maxPages int) {
 	cc.mu.Lock()
 	defer cc.mu.Unlock()
 
-	// 重新创建信号量（因为channel容量无法动态修改）
-	cc.videoSem = NewSemaphore(maxVideos)
-	cc.pageSem = NewSemaphore(maxPages)
+	// 只在容量变化且没有任务持有许可时才替换信号量
+	// 如果有任务正在使用旧信号量，替换会导致 Release 在新空信号量上永久阻塞
+	if maxVideos != cc.videoSem.Capacity() {
+		if cc.videoSem.Available() == cc.videoSem.Capacity() {
+			cc.videoSem = NewSemaphore(maxVideos)
+		}
+	}
+	if maxPages != cc.pageSem.Capacity() {
+		if cc.pageSem.Available() == cc.pageSem.Capacity() {
+			cc.pageSem = NewSemaphore(maxPages)
+		}
+	}
 }

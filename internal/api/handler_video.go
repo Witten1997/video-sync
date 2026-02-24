@@ -99,7 +99,7 @@ func (s *Server) handleListVideos(c *gin.Context) {
 	// 分页查询
 	var videos []models.Video
 	offset := (page - 1) * pageSize
-	if err := query.Preload("Pages").Offset(offset).Limit(pageSize).Find(&videos).Error; err != nil {
+	if err := query.Offset(offset).Limit(pageSize).Find(&videos).Error; err != nil {
 		respondInternalError(c, err)
 		return
 	}
@@ -574,11 +574,8 @@ func (s *Server) handleImageProxy(c *gin.Context) {
 	req.Header.Set("Referer", "https://www.bilibili.com/")
 	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36")
 
-	// 发送请求
-	client := &http.Client{
-		Timeout: 10 * time.Second,
-	}
-	resp, err := client.Do(req)
+	// 发送请求（复用连接池）
+	resp, err := s.imageProxyClient.Do(req)
 	if err != nil {
 		respondError(c, http.StatusBadGateway, "获取图片失败: "+err.Error())
 		return

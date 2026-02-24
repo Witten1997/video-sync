@@ -47,21 +47,22 @@ type EventHandler func(event ManagerEvent)
 
 // DownloadManager 下载管理器
 type DownloadManager struct {
-	config         *config.Config
-	db             *gorm.DB
-	biliClient     *bilibili.Client
-	downloader     *Downloader
-	queue          *TaskQueue
-	concurrency    *ConcurrencyController
-	tracker        *ProgressTracker
-	runningTasks   sync.Map // taskID -> *DownloadTask
-	completedTasks sync.Map // taskID -> *DownloadTask
-	eventHandlers  []EventHandler
-	ctx            context.Context
-	cancel         context.CancelFunc
-	wg             sync.WaitGroup
-	mu             sync.RWMutex
-	running        bool
+	config             *config.Config
+	db                 *gorm.DB
+	biliClient         *bilibili.Client
+	downloader         *Downloader
+	queue              *TaskQueue
+	concurrency        *ConcurrencyController
+	tracker            *ProgressTracker
+	runningTasks       sync.Map // taskID -> *DownloadTask
+	completedTasks     sync.Map // taskID -> *DownloadTask
+	eventHandlers      []EventHandler
+	ctx                context.Context
+	cancel             context.CancelFunc
+	wg                 sync.WaitGroup
+	mu                 sync.RWMutex
+	running            bool
+	lastProgressUpdate sync.Map // videoID -> time.Time (进度更新节流)
 }
 
 // NewDownloadManager 创建新的下载管理器
@@ -337,22 +338,30 @@ func (dm *DownloadManager) executeVideoTask(task *DownloadTask) {
 	// 更新下载记录为完成
 	if dm.db != nil && task.RecordID > 0 {
 		now := time.Now()
-		// 将所有仍为 pending/downloading 的文件标记为 completed
 		var record models.DownloadRecord
 		if dm.db.First(&record, task.RecordID).Error == nil {
 			var details models.FileDetailsData
 			if json.Unmarshal(record.FileDetails, &details) == nil {
+				hasFailed := false
 				for i := range details.Files {
 					if details.Files[i].Status == "pending" || details.Files[i].Status == "downloading" {
-						details.Files[i].Status = "succeeded"
-						details.Files[i].Progress = 100
+						details.Files[i].Status = "failed"
+						hasFailed = true
 					}
+					if details.Files[i].Status == "failed" {
+						hasFailed = true
+					}
+				}
+				finalStatus := "completed"
+				if hasFailed {
+					finalStatus = "failed"
 				}
 				if detailsJSON, err := json.Marshal(details); err == nil {
 					dm.db.Model(&record).Updates(map[string]interface{}{
-						"file_details": detailsJSON,
-						"status":       "completed",
-						"completed_at": now,
+						"file_details":  detailsJSON,
+						"status":        finalStatus,
+						"completed_at":  now,
+						"error_message": map[bool]string{true: "部分文件下载失败", false: ""}[hasFailed],
 					})
 				}
 			}
@@ -563,6 +572,68 @@ func (dm *DownloadManager) PrepareAndAddVideoTask(video *models.Video, baseDir s
 
 	utils.Info("已为视频 [%s] 创建下载任务，输出目录: %s，Pages数量: %d", videoWithPages.Name, outputDir, len(videoWithPages.Pages))
 	utils.Debug("视频Path字段已更新为: %s", video.Path)
+	return task, nil
+}
+
+// RetryVideoTask 基于已有下载记录重试视频下载（不创建新记录）
+func (dm *DownloadManager) RetryVideoTask(recordID uint, video *models.Video, priority TaskPriority) (*DownloadTask, error) {
+	// 从数据库重新加载完整的视频数据（包括Pages）
+	var videoWithPages models.Video
+	if dm.db != nil {
+		if err := dm.db.Preload("Pages").First(&videoWithPages, video.ID).Error; err != nil {
+			return nil, fmt.Errorf("加载视频数据失败: %w", err)
+		}
+	} else {
+		videoWithPages = *video
+	}
+
+	// 如果没有Pages，尝试从B站API重新获取
+	if len(videoWithPages.Pages) == 0 {
+		pages, err := dm.biliClient.GetVideoPages(videoWithPages.BVid)
+		if err != nil {
+			return nil, fmt.Errorf("视频没有分P信息且无法从B站获取: %w", err)
+		}
+		for _, p := range pages {
+			page := models.Page{
+				VideoID:  videoWithPages.ID,
+				CID:      p.CID,
+				PID:      p.Page,
+				Name:     p.Part,
+				Duration: p.Duration,
+				Width:    p.Dimension.Width,
+				Height:   p.Dimension.Height,
+				Image:    p.FirstFrame,
+			}
+			if err := dm.db.Create(&page).Error; err != nil {
+				utils.Warn("创建分P记录失败: %v", err)
+				continue
+			}
+			videoWithPages.Pages = append(videoWithPages.Pages, page)
+		}
+		if len(videoWithPages.Pages) == 0 {
+			return nil, fmt.Errorf("视频没有分P信息")
+		}
+	}
+
+	outputDir := videoWithPages.Path
+	if outputDir == "" {
+		return nil, fmt.Errorf("视频下载路径为空")
+	}
+
+	// 确保目录存在
+	if err := os.MkdirAll(outputDir, 0755); err != nil {
+		return nil, fmt.Errorf("创建视频目录失败: %w", err)
+	}
+
+	task := NewDownloadTask(TaskTypeVideo, &videoWithPages, nil, outputDir)
+	task.Priority = priority
+	task.RecordID = recordID
+
+	if err := dm.AddTask(task); err != nil {
+		return nil, err
+	}
+
+	utils.Info("已为视频 [%s] 创建重试任务，输出目录: %s，Pages数量: %d", videoWithPages.Name, outputDir, len(videoWithPages.Pages))
 	return task, nil
 }
 
@@ -790,6 +861,105 @@ func (dm *DownloadManager) ClearCompletedTasks() int {
 	return count
 }
 
+// RepairFalseCompletedRecords 修复误标记为完成的下载记录
+// 扫描所有 completed 记录，检查磁盘上是否存在视频文件，不存在则标记为 failed 并重置视频下载状态
+func (dm *DownloadManager) RepairFalseCompletedRecords() (int, error) {
+	if dm.db == nil {
+		return 0, fmt.Errorf("数据库未初始化")
+	}
+
+	var records []models.DownloadRecord
+	if err := dm.db.Preload("Video").Where("status = ?", "completed").Find(&records).Error; err != nil {
+		return 0, fmt.Errorf("查询下载记录失败: %w", err)
+	}
+
+	videoExts := []string{".mp4", ".mkv", ".webm", ".flv", ".avi", ".m4v"}
+	repaired := 0
+
+	for _, record := range records {
+		videoDir := record.Video.Path
+		if videoDir == "" {
+			continue
+		}
+
+		// 检查目录是否存在
+		if _, err := os.Stat(videoDir); os.IsNotExist(err) {
+			dm.markRecordAsFailed(&record, "下载目录不存在")
+			repaired++
+			continue
+		}
+
+		// 检查目录内是否有视频文件
+		hasVideo := false
+		entries, err := os.ReadDir(videoDir)
+		if err != nil {
+			dm.markRecordAsFailed(&record, "无法读取下载目录")
+			repaired++
+			continue
+		}
+
+		for _, entry := range entries {
+			if entry.IsDir() {
+				continue
+			}
+			name := strings.ToLower(entry.Name())
+			for _, ext := range videoExts {
+				if strings.HasSuffix(name, ext) {
+					info, err := entry.Info()
+					if err == nil && info.Size() > 0 {
+						hasVideo = true
+					}
+					break
+				}
+			}
+			if hasVideo {
+				break
+			}
+		}
+
+		if !hasVideo {
+			dm.markRecordAsFailed(&record, "视频文件不存在或大小为0，疑似下载未成功")
+			repaired++
+		}
+	}
+
+	if repaired > 0 {
+		utils.Info("已修复 %d 条误标记为完成的下载记录", repaired)
+	}
+	return repaired, nil
+}
+
+// markRecordAsFailed 将记录标记为失败并重置视频下载状态
+func (dm *DownloadManager) markRecordAsFailed(record *models.DownloadRecord, errMsg string) {
+	now := time.Now()
+	var details models.FileDetailsData
+	if json.Unmarshal(record.FileDetails, &details) == nil {
+		for i := range details.Files {
+			// 只标记视频文件为失败（nfo/subtitle/danmaku的size在进度追踪中始终为0，不能作为判断依据）
+			if details.Files[i].Name == "video" && details.Files[i].Status == "succeeded" && details.Files[i].Size == 0 {
+				details.Files[i].Status = "failed"
+			}
+		}
+		if detailsJSON, err := json.Marshal(details); err == nil {
+			record.FileDetails = detailsJSON
+		}
+	}
+
+	dm.db.Model(record).Updates(map[string]interface{}{
+		"status":        "failed",
+		"error_message": errMsg,
+		"file_details":  record.FileDetails,
+		"completed_at":  now,
+	})
+
+	// 重置视频下载状态
+	dm.db.Model(&models.Video{}).Where("id = ?", record.VideoID).Update("download_status", 0)
+	// 重置分P下载状态
+	dm.db.Model(&models.Page{}).Where("video_id = ?", record.VideoID).Update("download_status", 0)
+
+	utils.Info("已修复记录 ID=%d, 视频ID=%d: %s", record.ID, record.VideoID, errMsg)
+}
+
 // IsRunning 检查管理器是否在运行
 func (dm *DownloadManager) IsRunning() bool {
 	dm.mu.RLock()
@@ -965,6 +1135,15 @@ func (dm *DownloadManager) getVideoSourceInfo(video *models.Video) (sourceType s
 
 // updateDownloadRecordProgress 更新下载记录中的文件进度
 func (dm *DownloadManager) updateDownloadRecordProgress(videoID uint, taskName string, progress *SubTaskProgress) {
+	// 节流：每500ms最多更新一次DB，减少大文件下载时的写入压力
+	key := fmt.Sprintf("%d-%s", videoID, taskName)
+	now := time.Now()
+	if last, ok := dm.lastProgressUpdate.Load(key); ok {
+		if now.Sub(last.(time.Time)) < 500*time.Millisecond {
+			return
+		}
+	}
+	dm.lastProgressUpdate.Store(key, now)
 	var record models.DownloadRecord
 	if err := dm.db.Where("video_id = ? AND status IN ?", videoID, []string{"pending", "downloading"}).
 		Order("created_at DESC").First(&record).Error; err != nil {
@@ -993,13 +1172,13 @@ func (dm *DownloadManager) updateDownloadRecordProgress(videoID uint, taskName s
 
 	detailsJSON, _ := json.Marshal(details)
 
-	now := time.Now()
+	updateTime := time.Now()
 	updates := map[string]interface{}{
 		"file_details": detailsJSON,
 		"status":       "downloading",
 	}
 	if record.StartedAt == nil {
-		updates["started_at"] = now
+		updates["started_at"] = updateTime
 	}
 
 	dm.db.Model(&record).Updates(updates)
@@ -1008,7 +1187,7 @@ func (dm *DownloadManager) updateDownloadRecordProgress(videoID uint, taskName s
 	dm.emitEvent(ManagerEvent{
 		Type:      "download_record_progress",
 		Message:   taskName,
-		Timestamp: now,
+		Timestamp: updateTime,
 		Task:      &DownloadTask{RecordID: record.ID},
 		Progress:  progress,
 	})

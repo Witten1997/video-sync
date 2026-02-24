@@ -20,15 +20,16 @@ import (
 
 // Server API 服务器
 type Server struct {
-	config       *config.Config
-	configPath   string
-	db           *gorm.DB
-	biliClient   *bilibili.Client
-	downloadMgr  *downloader.DownloadManager
-	scheduler    *scheduler.Scheduler
-	router       *gin.Engine
-	httpServer   *http.Server
-	websocketHub *WebSocketHub
+	config           *config.Config
+	configPath       string
+	db               *gorm.DB
+	biliClient       *bilibili.Client
+	downloadMgr      *downloader.DownloadManager
+	scheduler        *scheduler.Scheduler
+	router           *gin.Engine
+	httpServer       *http.Server
+	websocketHub     *WebSocketHub
+	imageProxyClient *http.Client
 }
 
 // NewServer 创建新的 API 服务器
@@ -47,6 +48,14 @@ func NewServer(cfg *config.Config, configPath string, db *gorm.DB, biliClient *b
 		biliClient:   biliClient,
 		downloadMgr:  downloadMgr,
 		websocketHub: NewWebSocketHub(),
+		imageProxyClient: &http.Client{
+			Timeout: 10 * time.Second,
+			Transport: &http.Transport{
+				MaxIdleConns:        20,
+				MaxIdleConnsPerHost: 10,
+				IdleConnTimeout:     90 * time.Second,
+			},
+		},
 	}
 
 	// 创建调度器
@@ -171,6 +180,8 @@ func (s *Server) setupRouter() {
 			downloadRecords.POST("/:id/retry", s.handleRetryDownloadRecord)
 			downloadRecords.DELETE("/:id", s.handleDeleteDownloadRecord)
 			downloadRecords.POST("/batch-delete", s.handleBatchDeleteDownloadRecords)
+			downloadRecords.POST("/repair", s.handleRepairDownloadRecords)
+			downloadRecords.POST("/batch-retry", s.handleBatchRetryDownloadRecords)
 		}
 
 		// 图片代理（用于解决B站防盗链问题）
@@ -231,9 +242,9 @@ func (s *Server) Start() error {
 
 	// 监听下载管理器事件，推送到 WebSocket
 	s.downloadMgr.AddEventHandler(func(event downloader.ManagerEvent) {
-		// 新下载记录创建事件
+		// 新下载记录创建事件（高优先级）
 		if event.Type == downloader.EventRecordCreated && event.Record != nil {
-			s.websocketHub.Broadcast(WebSocketMessage{
+			s.websocketHub.BroadcastPriority(WebSocketMessage{
 				Type:      "download_record_created",
 				Data:      event.Record,
 				Timestamp: event.Timestamp,
@@ -264,7 +275,7 @@ func (s *Server) Start() error {
 			if event.Type == downloader.EventTaskFailed {
 				status = "failed"
 			}
-			s.websocketHub.Broadcast(WebSocketMessage{
+			s.websocketHub.BroadcastPriority(WebSocketMessage{
 				Type: "download_status",
 				Data: gin.H{
 					"record_id": event.Task.RecordID,
@@ -272,9 +283,11 @@ func (s *Server) Start() error {
 				},
 				Timestamp: event.Timestamp,
 			})
+			// 不再重复推送通用事件
+			return
 		}
 
-		// 原有的通用事件推送
+		// 非下载记录相关的通用事件推送
 		s.websocketHub.Broadcast(WebSocketMessage{
 			Type:      string(event.Type),
 			Data:      event,
@@ -390,7 +403,7 @@ func (s *Server) authMiddleware() gin.HandlerFunc {
 		path := c.Request.URL.Path
 
 		// 跳过公开接口
-		if path == "/api/health" || path == "/api/auth/login" {
+		if path == "/api/health" || path == "/api/auth/login" || path == "/api/image-proxy" {
 			c.Next()
 			return
 		}

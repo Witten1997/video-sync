@@ -16,7 +16,7 @@ export interface VideoSource {
   name: string
   enabled: boolean
   path: string
-  latest_row_at?: string
+  last_scan_at?: string
   created_at: string
   // 特定类型的字段
   f_id?: string // 收藏夹ID

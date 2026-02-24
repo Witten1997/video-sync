@@ -4,6 +4,12 @@
       <h2 style="margin: 0 0 8px; font-size: 1.25rem; font-weight: 700; color: #1e293b;">下载管理</h2>
       <p style="margin: 0; font-size: 0.875rem; color: #64748b;">查看和管理所有下载记录</p>
     </div>
+    <div style="margin-bottom: 16px;">
+      <el-button type="warning" :loading="repairing" @click="handleRepair">
+        <span class="material-icons-round" style="font-size: 16px; margin-right: 4px;">build</span>
+        检查下载状态
+      </el-button>
+    </div>
 
     <!-- 筛选栏 -->
     <el-card style="margin-bottom: 16px;">
@@ -41,6 +47,7 @@
     <el-card>
       <div v-if="selectedIds.length > 0" style="margin-bottom: 12px; display: flex; align-items: center; gap: 12px;">
         <span style="font-size: 13px; color: #64748b;">已选 {{ selectedIds.length }} 项</span>
+        <el-button type="primary" size="small" @click="handleBatchRetry">批量重试</el-button>
         <el-popconfirm :title="`确定删除选中的 ${selectedIds.length} 条记录？`" @confirm="handleBatchDelete">
           <template #reference>
             <el-button type="danger" size="small">批量删除</el-button>
@@ -91,7 +98,7 @@
         <el-table-column label="操作" width="120" fixed="right">
           <template #default="{ row }">
             <el-button
-              v-if="row.status === 'failed'"
+              v-if="row.status === 'failed' || row.status === 'completed'"
               type="primary" link size="small"
               @click="handleRetry(row)"
             >重试</el-button>
@@ -122,16 +129,73 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { getDownloadRecords, getDownloadRecord, retryDownloadRecord, deleteDownloadRecord, batchDeleteDownloadRecords } from '@/api/download-records'
+import { getDownloadRecords, getDownloadRecord, retryDownloadRecord, deleteDownloadRecord, batchDeleteDownloadRecords, repairDownloadRecords, batchRetryDownloadRecords } from '@/api/download-records'
 import SegmentedProgress from '@/components/SegmentedProgress.vue'
 import type { DownloadRecord } from '@/types'
+import { useAuthStore } from '@/stores/auth'
 
 const records = ref<DownloadRecord[]>([])
 const loading = ref(false)
+const repairing = ref(false)
 const selectedIds = ref<number[]>([])
+const selectedRows = ref<DownloadRecord[]>([])
 const filters = reactive({ status: '', source_type: '', keyword: '' })
 const pagination = reactive({ page: 1, pageSize: 20, total: 0 })
 let ws: WebSocket | null = null
+let pollTimer: ReturnType<typeof setInterval> | null = null
+
+// 进度更新批量合并：收集 WebSocket 消息，用 rAF 批量应用
+let pendingProgressUpdates: Map<string, { record_id: number; file_name: string; status: string; progress: number; size: number }> = new Map()
+let pendingStatusUpdates: Map<number, string> = new Map()
+let rafId: number | null = null
+
+const flushUpdates = () => {
+  rafId = null
+
+  // 批量应用进度更新
+  if (pendingProgressUpdates.size > 0) {
+    for (const update of pendingProgressUpdates.values()) {
+      const record = records.value.find(r => r.id === update.record_id)
+      if (record?.file_details?.files) {
+        const file = record.file_details.files.find(f => f.name === update.file_name)
+        if (file) {
+          file.status = update.status
+          file.progress = update.progress
+          file.size = update.size
+        }
+        if (record.status === 'pending') {
+          record.status = 'downloading'
+        }
+      }
+    }
+    pendingProgressUpdates.clear()
+  }
+
+  // 批量应用状态更新
+  if (pendingStatusUpdates.size > 0) {
+    for (const [record_id, status] of pendingStatusUpdates) {
+      const record = records.value.find(r => r.id === record_id)
+      if (record) {
+        record.status = status
+        if (status === 'completed') {
+          record.file_details.files.forEach(f => {
+            if (f.status !== 'failed' && f.status !== 'skipped') {
+              f.status = 'completed'
+              f.progress = 100
+            }
+          })
+        }
+      }
+    }
+    pendingStatusUpdates.clear()
+  }
+}
+
+const scheduleFlush = () => {
+  if (rafId === null) {
+    rafId = requestAnimationFrame(flushUpdates)
+  }
+}
 
 const loadRecords = async () => {
   loading.value = true
@@ -145,6 +209,38 @@ const loadRecords = async () => {
     pagination.total = data.total
   } finally {
     loading.value = false
+  }
+}
+
+// 检查是否有正在下载的记录，有则定时轮询保底
+const hasActiveDownloads = () => records.value.some(r => r.status === 'downloading' || r.status === 'pending')
+
+const startPollIfNeeded = () => {
+  stopPoll()
+  if (hasActiveDownloads()) {
+    pollTimer = setInterval(async () => {
+      if (!hasActiveDownloads()) {
+        stopPoll()
+        return
+      }
+      // 静默刷新，不显示 loading
+      try {
+        const data = await getDownloadRecords({
+          page: pagination.page,
+          page_size: pagination.pageSize,
+          ...filters
+        })
+        records.value = data.items || []
+        pagination.total = data.total
+      } catch (_) {}
+    }, 10000)
+  }
+}
+
+const stopPoll = () => {
+  if (pollTimer) {
+    clearInterval(pollTimer)
+    pollTimer = null
   }
 }
 
@@ -162,12 +258,44 @@ const handleDelete = async (row: DownloadRecord) => {
 
 const handleSelectionChange = (rows: DownloadRecord[]) => {
   selectedIds.value = rows.map(r => r.id)
+  selectedRows.value = rows
+}
+
+const handleRepair = async () => {
+  repairing.value = true
+  try {
+    const data = await repairDownloadRecords()
+    if (data.repaired > 0) {
+      ElMessage.success(`已修复 ${data.repaired} 条记录`)
+      loadRecords()
+    } else {
+      ElMessage.info('未发现异常记录')
+    }
+  } finally {
+    repairing.value = false
+  }
+}
+
+const handleBatchRetry = async () => {
+  const retryableIds = selectedRows.value
+    .filter(r => r.status === 'failed' || r.status === 'completed')
+    .map(r => r.id)
+  if (retryableIds.length === 0) {
+    ElMessage.warning('选中记录中没有可重试的项')
+    return
+  }
+  const data = await batchRetryDownloadRecords(retryableIds)
+  ElMessage.success(`已重试 ${data.retried} 条记录`)
+  selectedIds.value = []
+  selectedRows.value = []
+  loadRecords()
 }
 
 const handleBatchDelete = async () => {
   await batchDeleteDownloadRecords(selectedIds.value)
   ElMessage.success('批量删除成功')
   selectedIds.value = []
+  selectedRows.value = []
   loadRecords()
 }
 
@@ -188,8 +316,9 @@ const formatTime = (time: string) => {
 
 // WebSocket
 const connectWebSocket = () => {
+  const authStore = useAuthStore()
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-  ws = new WebSocket(`${protocol}//${window.location.host}/api/ws`)
+  ws = new WebSocket(`${protocol}//${window.location.host}/api/ws?token=${encodeURIComponent(authStore.token)}`)
 
   ws.onmessage = async (event) => {
     try {
@@ -201,36 +330,20 @@ const connectWebSocket = () => {
             const record = await getDownloadRecord(id)
             records.value.unshift(record)
             pagination.total++
+            startPollIfNeeded()
           } catch (e) {}
         }
       } else if (msg.type === 'download_progress') {
         const { record_id, file_name, status, progress, size } = msg.data
-        const record = records.value.find(r => r.id === record_id)
-        if (record?.file_details?.files) {
-          const file = record.file_details.files.find(f => f.name === file_name)
-          if (file) {
-            file.status = status
-            file.progress = progress
-            file.size = size
-          }
-          if (record.status === 'pending') {
-            record.status = 'downloading'
-          }
-        }
+        // 合并到待更新队列，同一 record+file 只保留最新值
+        pendingProgressUpdates.set(`${record_id}-${file_name}`, { record_id, file_name, status, progress, size })
+        scheduleFlush()
       } else if (msg.type === 'download_status') {
         const { record_id, status } = msg.data
-        const record = records.value.find(r => r.id === record_id)
-        if (record) {
-          record.status = status
-          if (status === 'completed') {
-            record.file_details.files.forEach(f => {
-              if (f.status !== 'failed' && f.status !== 'skipped') {
-                f.status = 'completed'
-                f.progress = 100
-              }
-            })
-          }
-        }
+        pendingStatusUpdates.set(record_id, status)
+        scheduleFlush()
+        // 状态变更后检查是否还需要轮询
+        setTimeout(startPollIfNeeded, 100)
       }
     } catch (e) {}
   }
@@ -243,12 +356,17 @@ const connectWebSocket = () => {
 }
 
 onMounted(() => {
-  loadRecords()
+  loadRecords().then(startPollIfNeeded)
   connectWebSocket()
 })
 
 onUnmounted(() => {
   ws?.close()
   ws = null
+  stopPoll()
+  if (rafId !== null) {
+    cancelAnimationFrame(rafId)
+    rafId = null
+  }
 })
 </script>

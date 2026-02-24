@@ -223,6 +223,39 @@ func (d *Downloader) downloadPageVideo(ctx context.Context, video *models.Video,
 		return fmt.Errorf("下载视频失败: %w", err)
 	}
 
+	// 验证视频文件是否实际生成
+	videoFileExists := false
+	videoExts := []string{".mp4", ".mkv", ".webm", ".flv", ".avi", ".m4v"}
+	baseName := utils.Filenamify(video.Name)
+	entries, _ := os.ReadDir(outputDir)
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		for _, ext := range videoExts {
+			if strings.HasSuffix(strings.ToLower(name), ext) && strings.HasPrefix(name, baseName) {
+				info, err := entry.Info()
+				if err == nil && info.Size() > 0 {
+					videoFileExists = true
+				}
+				break
+			}
+		}
+		if videoFileExists {
+			break
+		}
+	}
+
+	if !videoFileExists {
+		pageProgress.UpdateSubTask("video", func(task *SubTaskProgress) {
+			task.Status = StatusFailed
+			task.Error = "下载完成但未找到视频文件，可能被B站限流或需要大会员"
+			task.EndTime = time.Now()
+		})
+		return fmt.Errorf("下载完成但未找到视频文件: %s", outputDir)
+	}
+
 	// 更新子任务状态
 	pageProgress.UpdateSubTask("video", func(task *SubTaskProgress) {
 		task.Status = StatusSucceeded

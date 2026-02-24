@@ -106,7 +106,7 @@
       </el-table-column>
       <el-table-column label="最后扫描" width="180">
         <template #default="{ row }">
-          {{ row.latest_row_at ? formatTime(row.latest_row_at) : '未扫描' }}
+          {{ row.last_scan_at ? formatTime(row.last_scan_at) : '未扫描' }}
         </template>
       </el-table-column>
       <el-table-column label="操作" width="220" fixed="right">

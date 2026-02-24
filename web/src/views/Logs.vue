@@ -49,6 +49,7 @@
 <script setup lang="ts">
 import { ref, computed, nextTick, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
+import { useAuthStore } from '@/stores/auth'
 import dayjs from 'dayjs'
 
 defineOptions({
@@ -61,6 +62,7 @@ interface LogEntry {
   message: string
 }
 
+const authStore = useAuthStore()
 const logContainer = ref<HTMLElement>()
 const logs = ref<LogEntry[]>([])
 const logLevel = ref('')
@@ -80,7 +82,7 @@ const connectWebSocket = () => {
   try {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
     const host = window.location.host
-    ws = new WebSocket(`${protocol}//${host}/api/ws`)
+    ws = new WebSocket(`${protocol}//${host}/api/ws?token=${authStore.token}`)
 
     ws.onopen = () => {
       isConnected.value = true
@@ -89,7 +91,8 @@ const connectWebSocket = () => {
 
     ws.onmessage = (event) => {
       try {
-        const data = JSON.parse(event.data)
+        const raw = JSON.parse(event.data)
+        const data = raw.data || raw
         logs.value.push({
           time: dayjs().format('HH:mm:ss'),
           level: data.level || 'info',

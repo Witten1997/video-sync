@@ -26,3 +26,11 @@ export const deleteDownloadRecord = (id: number) => {
 export const batchDeleteDownloadRecords = (ids: number[]) => {
   return http.post<void>('/download-records/batch-delete', { ids })
 }
+
+export const repairDownloadRecords = () => {
+  return http.post<{ repaired: number; message: string }>('/download-records/repair')
+}
+
+export const batchRetryDownloadRecords = (ids: number[]) => {
+  return http.post<{ retried: number; message: string }>('/download-records/batch-retry', { ids })
+}

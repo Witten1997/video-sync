@@ -137,21 +137,25 @@
       <el-table-column type="selection" width="55" align="center" />
       <el-table-column label="封面" width="150">
         <template #default="{ row }">
-          <el-image
+          <img
+            v-if="row.cover"
             :src="getProxiedImageUrl(row.cover)"
-            fit="cover"
-            style="width: 120px; height: 68px; border-radius: 4px"
-            lazy
-          >
-            <template #error>
-              <div class="image-slot">
-                <el-icon><Picture /></el-icon>
-              </div>
-            </template>
-          </el-image>
+            loading="lazy"
+            decoding="async"
+            width="120"
+            height="68"
+            style="width: 120px; height: 68px; object-fit: cover; border-radius: 4px; display: block;"
+          />
+          <div v-else class="image-slot">
+            <el-icon><Picture /></el-icon>
+          </div>
         </template>
       </el-table-column>
-      <el-table-column prop="name" label="标题" min-width="300" show-overflow-tooltip />
+      <el-table-column prop="name" label="标题" min-width="300">
+        <template #default="{ row }">
+          <span class="text-ellipsis" :title="row.name">{{ row.name }}</span>
+        </template>
+      </el-table-column>
       <el-table-column prop="bvid" label="BV号" width="150" />
       <el-table-column prop="upper_name" label="UP主" width="150" />
       <el-table-column label="分P" width="80" align="center">
@@ -205,20 +209,18 @@
       <div v-for="item in videos" :key="item.id" class="grid-item">
         <el-card :body-style="{ padding: '0px' }" shadow="hover">
           <div class="grid-cover-wrapper">
-            <el-image
+            <img
+              v-if="item.cover"
               :src="getProxiedImageUrl(item.cover)"
-              fit="cover"
+              loading="lazy"
+              decoding="async"
               class="grid-cover"
-              lazy
               @click="handleViewDetail(item)"
               style="cursor: pointer"
-            >
-              <template #error>
-                <div class="image-slot-grid">
-                  <el-icon><Picture /></el-icon>
-                </div>
-              </template>
-            </el-image>
+            />
+            <div v-else class="image-slot-grid" @click="handleViewDetail(item)">
+              <el-icon><Picture /></el-icon>
+            </div>
             <!-- 播放按钮悬浮层 -->
             <div
               v-if="isDownloadComplete(item.download_status) && item.valid"
@@ -587,15 +589,23 @@ onMounted(() => {
   justify-content: flex-end;
 }
 
+.text-ellipsis {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .image-slot {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 100%;
-  height: 100%;
+  width: 120px;
+  height: 68px;
   background: #f8fafc;
   color: #94a3b8;
   font-size: 30px;
+  border-radius: 4px;
 }
 
 /* 卡片视图样式 */
@@ -608,37 +618,32 @@ onMounted(() => {
 
 .grid-item {
   height: 100%;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 300px;
 }
 
 .grid-item :deep(.el-card) {
   border-radius: 16px;
   border: 1px solid #f1f5f9;
-  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
   overflow: hidden;
-  transition: box-shadow 0.2s ease, transform 0.2s ease;
 }
 
 .grid-item :deep(.el-card:hover) {
-  box-shadow: 0 4px 12px 0 rgb(0 0 0 / 0.08);
-  transform: translateY(-2px);
+  border-color: #e2e8f0;
 }
 
 .grid-cover-wrapper {
   position: relative;
   overflow: hidden;
   border-radius: 16px 16px 0 0;
+  aspect-ratio: 16 / 9;
 }
 
 .grid-cover {
   width: 100%;
-  height: 160px;
+  height: 100%;
   object-fit: cover;
   display: block;
-  transition: transform 0.3s ease;
-}
-
-.grid-cover-wrapper:hover .grid-cover {
-  transform: scale(1.05);
 }
 
 .play-overlay {
@@ -652,7 +657,6 @@ onMounted(() => {
   justify-content: center;
   background: rgba(0, 0, 0, 0.4);
   opacity: 0;
-  transition: opacity 0.3s ease;
   cursor: pointer;
   z-index: 1;
 }
@@ -663,12 +667,6 @@ onMounted(() => {
 
 .play-icon {
   color: #fff;
-  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5));
-  transition: transform 0.2s ease;
-}
-
-.play-overlay:hover .play-icon {
-  transform: scale(1.1);
 }
 
 .image-slot-grid {
