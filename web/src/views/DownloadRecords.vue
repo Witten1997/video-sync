@@ -61,7 +61,7 @@
             <div style="display: flex; align-items: center; gap: 12px;">
               <img
                 v-if="row.video?.cover"
-                :src="'/api/image-proxy?url=' + encodeURIComponent(row.video.cover)"
+                :src="getProxiedImageUrl(row.video.cover)"
                 style="width: 80px; height: 45px; object-fit: cover; border-radius: 6px; flex-shrink: 0;"
               />
               <div style="min-width: 0;">
@@ -133,6 +133,7 @@ import { getDownloadRecords, getDownloadRecord, retryDownloadRecord, deleteDownl
 import SegmentedProgress from '@/components/SegmentedProgress.vue'
 import type { DownloadRecord } from '@/types'
 import { useAuthStore } from '@/stores/auth'
+import { getProxiedImageUrl } from '@/utils/image'
 
 const records = ref<DownloadRecord[]>([])
 const loading = ref(false)

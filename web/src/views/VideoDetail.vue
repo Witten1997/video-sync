@@ -10,7 +10,7 @@
       <template v-if="video">
         <el-row :gutter="20">
           <el-col :span="8">
-            <el-image :src="getProxiedImageUrl(video.cover)" fit="cover" style="width: 100%; border-radius: 8px" />
+            <el-image :src="getProxiedImageUrl(video.cover, false)" fit="cover" style="width: 100%; border-radius: 8px" />
           </el-col>
           <el-col :span="16">
             <div class="title-actions">

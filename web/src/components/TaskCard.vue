@@ -279,7 +279,7 @@ const handleRemove = () => emit('remove', props.task.id)
 <style scoped>
 .task-card {
   margin-bottom: 16px;
-  transition: all 0.3s;
+  transition: box-shadow 0.3s;
 }
 
 .task-card:hover {
