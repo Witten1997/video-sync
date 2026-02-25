@@ -280,7 +280,7 @@ func (st *SyncTask) scanVideoSource(source VideoSourceInfo) (*models.VideoSource
 
 	// 使用适配器扫描视频源
 	scanOpts := &adapter.ScanOptions{
-		Limit: 100, // 每次最多扫描100个视频
+		Limit: 0, // 不限制扫描数量
 	}
 
 	// 如果有上次扫描时间，使用增量扫描

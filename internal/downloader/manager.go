@@ -1181,7 +1181,7 @@ func (dm *DownloadManager) updateDownloadRecordProgress(videoID uint, taskName s
 		updates["started_at"] = updateTime
 	}
 
-	dm.db.Model(&record).Updates(updates)
+	dm.db.Model(&record).Where("status IN ?", []string{"pending", "downloading"}).Updates(updates)
 
 	// 通过事件推送进度
 	dm.emitEvent(ManagerEvent{

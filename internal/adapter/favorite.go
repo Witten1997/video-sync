@@ -107,6 +107,9 @@ func (a *FavoriteAdapter) Scan(ctx context.Context, opts *ScanOptions) ([]VideoI
 		}
 
 		page++
+
+		// 翻页间隔，防止触发B站风控
+		time.Sleep(300 * time.Millisecond)
 	}
 
 	return allVideos, nil

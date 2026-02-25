@@ -126,6 +126,9 @@ func (a *CollectionAdapter) Scan(ctx context.Context, opts *ScanOptions) ([]Vide
 		}
 
 		page++
+
+		// 翻页间隔，防止触发B站风控
+		time.Sleep(300 * time.Millisecond)
 	}
 
 	return allVideos, nil
