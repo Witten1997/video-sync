@@ -188,6 +188,12 @@ func (g *MovieGenerator) AddUniqueID(idType, value string, isDefault bool) *Movi
 	return g
 }
 
+// SetPlayCount 设置播放量
+func (g *MovieGenerator) SetPlayCount(count int) *MovieGenerator {
+	g.nfo.PlayCount = count
+	return g
+}
+
 // SetRating 设置评分
 func (g *MovieGenerator) SetRating(value float64, votes int) *MovieGenerator {
 	if g.nfo.Ratings == nil {

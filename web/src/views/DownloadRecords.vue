@@ -4,12 +4,6 @@
       <h2 style="margin: 0 0 8px; font-size: 1.25rem; font-weight: 700; color: #1e293b;">下载管理</h2>
       <p style="margin: 0; font-size: 0.875rem; color: #64748b;">查看和管理所有下载记录</p>
     </div>
-    <div style="margin-bottom: 16px;">
-      <el-button type="warning" :loading="repairing" @click="handleRepair">
-        <span class="material-icons-round" style="font-size: 16px; margin-right: 4px;">build</span>
-        检查下载状态
-      </el-button>
-    </div>
 
     <!-- 筛选栏 -->
     <el-card style="margin-bottom: 16px;">
@@ -129,7 +123,7 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { getDownloadRecords, getDownloadRecord, retryDownloadRecord, deleteDownloadRecord, batchDeleteDownloadRecords, repairDownloadRecords, batchRetryDownloadRecords } from '@/api/download-records'
+import { getDownloadRecords, getDownloadRecord, retryDownloadRecord, deleteDownloadRecord, batchDeleteDownloadRecords, batchRetryDownloadRecords } from '@/api/download-records'
 import SegmentedProgress from '@/components/SegmentedProgress.vue'
 import type { DownloadRecord } from '@/types'
 import { useAuthStore } from '@/stores/auth'
@@ -137,7 +131,6 @@ import { getProxiedImageUrl } from '@/utils/image'
 
 const records = ref<DownloadRecord[]>([])
 const loading = ref(false)
-const repairing = ref(false)
 const selectedIds = ref<number[]>([])
 const selectedRows = ref<DownloadRecord[]>([])
 const filters = reactive({ status: '', source_type: '', keyword: '' })
@@ -260,21 +253,6 @@ const handleDelete = async (row: DownloadRecord) => {
 const handleSelectionChange = (rows: DownloadRecord[]) => {
   selectedIds.value = rows.map(r => r.id)
   selectedRows.value = rows
-}
-
-const handleRepair = async () => {
-  repairing.value = true
-  try {
-    const data = await repairDownloadRecords()
-    if (data.repaired > 0) {
-      ElMessage.success(`已修复 ${data.repaired} 条记录`)
-      loadRecords()
-    } else {
-      ElMessage.info('未发现异常记录')
-    }
-  } finally {
-    repairing.value = false
-  }
 }
 
 const handleBatchRetry = async () => {

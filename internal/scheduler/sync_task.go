@@ -426,6 +426,7 @@ func (st *SyncTask) createVideoModel(video adapter.VideoInfo, source VideoSource
 		UpperName:      video.Owner.Name,
 		PubTime:        video.PubDate,
 		FavTime:        video.AddTime,
+		ViewCount:      video.Stats.View,
 		CTime:          time.Now(),
 		SinglePage:     len(video.Pages) <= 1,
 		Valid:          true, // 默认为有效

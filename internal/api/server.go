@@ -187,6 +187,12 @@ func (s *Server) setupRouter() {
 		// 图片代理（用于解决B站防盗链问题）
 		api.GET("/image-proxy", s.handleImageProxy)
 
+		// 维护工具
+		maintenance := api.Group("/maintenance")
+		{
+			maintenance.POST("/refresh-view-counts", s.handleRefreshViewCounts)
+		}
+
 		// 快捷订阅
 		subscription := api.Group("/subscription")
 		{

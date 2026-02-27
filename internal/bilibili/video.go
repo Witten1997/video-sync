@@ -138,14 +138,14 @@ type SeasonSection struct {
 
 // EpisodeInfo 合集中的视频
 type EpisodeInfo struct {
-	SeasonID  int64  `json:"season_id"`  // 合集ID
-	SectionID int64  `json:"section_id"` // 分节ID
-	ID        int64  `json:"id"`         // 视频ID
-	Aid       int64  `json:"aid"`        // avid
-	CID       int64  `json:"cid"`        // cid
-	Title     string `json:"title"`      // 标题
-	Page      int    `json:"page"`       // 页码
-	BVid      string `json:"bvid"`       // bvid
+	SeasonID  int64           `json:"season_id"`  // 合集ID
+	SectionID int64           `json:"section_id"` // 分节ID
+	ID        int64           `json:"id"`         // 视频ID
+	Aid       int64           `json:"aid"`        // avid
+	CID       int64           `json:"cid"`        // cid
+	Title     string          `json:"title"`      // 标题
+	Page      json.RawMessage `json:"page"`       // 页码（可能是int或object）
+	BVid      string          `json:"bvid"`       // bvid
 }
 
 // SeasonStat 合集统计信息

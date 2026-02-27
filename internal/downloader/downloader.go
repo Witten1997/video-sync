@@ -223,28 +223,73 @@ func (d *Downloader) downloadPageVideo(ctx context.Context, video *models.Video,
 		return fmt.Errorf("下载视频失败: %w", err)
 	}
 
-	// 验证视频文件是否实际生成
+	// 验证视频文件是否实际生成，并清理中间文件
 	videoFileExists := false
+	var videoFileSize int64
+	var videoFileName string
 	videoExts := []string{".mp4", ".mkv", ".webm", ".flv", ".avi", ".m4v"}
 	baseName := utils.Filenamify(video.Name)
 	entries, _ := os.ReadDir(outputDir)
+	// 正则匹配 yt-dlp 中间文件: filename.fXXXXX.ext（音视频流分离时产生）
+	var tempFiles []string
 	for _, entry := range entries {
 		if entry.IsDir() {
 			continue
 		}
 		name := entry.Name()
 		for _, ext := range videoExts {
-			if strings.HasSuffix(strings.ToLower(name), ext) && strings.HasPrefix(name, baseName) {
-				info, err := entry.Info()
-				if err == nil && info.Size() > 0 {
-					videoFileExists = true
-				}
-				break
+			if !strings.HasSuffix(strings.ToLower(name), ext) || !strings.HasPrefix(name, baseName) {
+				continue
 			}
+			// 检查是否是中间文件（包含 .fXXXXX. 格式ID后缀）
+			nameWithoutExt := name[:len(name)-len(ext)]
+			if idx := strings.LastIndex(nameWithoutExt, ".f"); idx > 0 {
+				suffix := nameWithoutExt[idx+2:]
+				isTemp := len(suffix) > 0
+				for _, c := range suffix {
+					if c < '0' || c > '9' {
+						isTemp = false
+						break
+					}
+				}
+				if isTemp {
+					tempFiles = append(tempFiles, filepath.Join(outputDir, name))
+					break
+				}
+			}
+			info, err := entry.Info()
+			if err == nil && info.Size() > 0 {
+				videoFileExists = true
+				videoFileSize = info.Size()
+				videoFileName = name
+			}
+			break
 		}
 		if videoFileExists {
 			break
 		}
+	}
+
+	// 清理 yt-dlp 合并后残留的中间文件
+	if videoFileExists && len(tempFiles) > 0 {
+		for _, f := range tempFiles {
+			if err := os.Remove(f); err != nil {
+				utils.Warn("清理中间文件失败: %s, %v", f, err)
+			} else {
+				utils.Info("已清理中间文件: %s", filepath.Base(f))
+			}
+		}
+	}
+
+	// 如果没找到合并后的文件，但有中间文件，说明合并失败
+	if !videoFileExists && len(tempFiles) > 0 {
+		_ = videoFileName
+		pageProgress.UpdateSubTask("video", func(task *SubTaskProgress) {
+			task.Status = StatusFailed
+			task.Error = "视频流下载成功但合并失败，请检查 ffmpeg 是否正确安装"
+			task.EndTime = time.Now()
+		})
+		return fmt.Errorf("视频合并失败，存在未合并的中间文件: %s", outputDir)
 	}
 
 	if !videoFileExists {
@@ -256,11 +301,15 @@ func (d *Downloader) downloadPageVideo(ctx context.Context, video *models.Video,
 		return fmt.Errorf("下载完成但未找到视频文件: %s", outputDir)
 	}
 
-	// 更新子任务状态
+	// 更新子任务状态（使用磁盘实际文件大小，防止进度回调未触发导致size=0）
 	pageProgress.UpdateSubTask("video", func(task *SubTaskProgress) {
 		task.Status = StatusSucceeded
 		task.Progress = 100
 		task.EndTime = time.Now()
+		if task.DownloadedSize == 0 {
+			task.DownloadedSize = videoFileSize
+			task.TotalSize = videoFileSize
+		}
 	})
 	d.tracker.NotifyProgress(video.ID, page.PID, "video", pageProgress.GetSubTask("video"))
 
@@ -642,6 +691,7 @@ func (d *Downloader) generateNFO(ctx context.Context, video *models.Video, page 
 			SetDateAdded(dateAdded).
 			SetStudio("bilibili").
 			SetDirector(video.UpperName).
+			SetPlayCount(video.ViewCount).
 			AddActor(video.UpperName, "UP主", video.UpperFace).
 			AddUniqueID("bvid", video.BVid, true).
 			AddTags(video.Tags)
@@ -681,6 +731,7 @@ func (d *Downloader) generateNFO(ctx context.Context, video *models.Video, page 
 			SetDateAdded(dateAdded).
 			SetStudio("bilibili").
 			SetDirector(video.UpperName).
+			SetPlayCount(video.ViewCount).
 			AddActor(video.UpperName, "UP主", video.UpperFace).
 			AddUniqueID("bvid", video.BVid, true).
 			AddTags(video.Tags)

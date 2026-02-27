@@ -17,6 +17,7 @@ type Video struct {
 	UpperID        int64          `gorm:"not null;index" json:"upper_id"`
 	UpperName      string         `gorm:"size:100" json:"upper_name"`
 	UpperFace      string         `gorm:"size:500" json:"upper_face"`
+	ViewCount      int            `gorm:"default:0" json:"view_count"`
 	Category       int            `json:"category"`
 	PubTime        time.Time      `gorm:"column:pubtime;not null;index" json:"pubtime"`
 	FavTime        time.Time      `gorm:"column:favtime;not null;index" json:"favtime"`

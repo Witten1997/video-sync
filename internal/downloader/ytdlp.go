@@ -73,6 +73,8 @@ func (d *YtdlpDownloader) buildCommand(ctx context.Context, opts *DownloadOption
 	// 视频格式
 	if opts.Format != "" {
 		args = append(args, "-f", opts.Format)
+		// 指定合并输出格式，确保 ffmpeg 正确合并音视频流
+		args = append(args, "--merge-output-format", "mp4")
 	}
 
 	// 字幕

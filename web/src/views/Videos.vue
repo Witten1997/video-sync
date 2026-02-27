@@ -33,6 +33,7 @@
         <el-option label="创建时间" value="created_at" />
         <el-option label="标题名称" value="name" />
         <el-option label="发布时间" value="pubtime" />
+        <el-option label="播放量" value="view_count" />
       </el-select>
       <el-button
         :icon="Sort"
@@ -163,6 +164,11 @@
           {{ row.single_page ? '单P' : '多P' }}
         </template>
       </el-table-column>
+      <el-table-column label="播放量" width="100" align="center">
+        <template #default="{ row }">
+          {{ formatViewCount(row.view_count) }}
+        </template>
+      </el-table-column>
       <el-table-column label="状态" width="100" align="center">
         <template #default="{ row }">
           <el-tag v-if="!row.valid" type="danger">无效</el-tag>
@@ -238,6 +244,7 @@
             </div>
             <div class="grid-info">
               <el-text size="small" type="info">{{ item.upper_name }}</el-text>
+              <el-text size="small" type="info" style="margin-left: 8px;">▶ {{ formatViewCount(item.view_count) }}</el-text>
             </div>
             <div class="grid-meta">
               <el-tag size="small" type="info">{{ item.bvid }}</el-tag>
@@ -316,7 +323,7 @@ const pageSize = ref(20)
 const total = ref(0)
 const viewMode = ref<'list' | 'grid'>('grid')
 const selectedVideos = ref<Video[]>([])
-const sortBy = ref('created_at')
+const sortBy = ref('pubtime')
 const sortOrder = ref('desc')
 // URL下载对话框
 const downloadDialogVisible = ref(false)
@@ -484,6 +491,14 @@ const handleDelete = async (row: Video) => {
 // 检查是否下载完成（简单判断）
 const isDownloadComplete = (status: number) => {
   return status !== 0
+}
+
+// 格式化播放量
+const formatViewCount = (count: number) => {
+  if (!count) return '0'
+  if (count >= 100000000) return (count / 100000000).toFixed(1) + '亿'
+  if (count >= 10000) return (count / 10000).toFixed(1) + '万'
+  return count.toString()
 }
 
 // 格式化时间

@@ -164,6 +164,12 @@ func (g *EpisodeGenerator) AddUniqueID(idType, value string, isDefault bool) *Ep
 	return g
 }
 
+// SetPlayCount 设置播放量
+func (g *EpisodeGenerator) SetPlayCount(count int) *EpisodeGenerator {
+	g.nfo.PlayCount = count
+	return g
+}
+
 // SetVideoInfo 设置视频信息
 func (g *EpisodeGenerator) SetVideoInfo(codec string, width, height, duration int) *EpisodeGenerator {
 	if g.nfo.FileInfo == nil {

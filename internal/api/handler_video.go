@@ -86,6 +86,7 @@ func (s *Server) handleListVideos(c *gin.Context) {
 		"name":       "name",
 		"created_at": "created_at",
 		"pubtime":    "pubtime",
+		"view_count": "view_count",
 	}
 	sortColumn, ok := allowedSortFields[sortBy]
 	if !ok {

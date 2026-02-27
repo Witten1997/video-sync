@@ -336,6 +336,7 @@ func (dm *DownloadManager) executeVideoTask(task *DownloadTask) {
 	task.SetStatus(TaskStatusCompleted)
 
 	// 更新下载记录为完成
+	finalStatus := "completed"
 	if dm.db != nil && task.RecordID > 0 {
 		now := time.Now()
 		var record models.DownloadRecord
@@ -352,7 +353,6 @@ func (dm *DownloadManager) executeVideoTask(task *DownloadTask) {
 						hasFailed = true
 					}
 				}
-				finalStatus := "completed"
 				if hasFailed {
 					finalStatus = "failed"
 				}
@@ -368,8 +368,8 @@ func (dm *DownloadManager) executeVideoTask(task *DownloadTask) {
 		}
 	}
 
-	// 更新数据库中的视频下载状态
-	if dm.db != nil {
+	// 只有全部下载成功才更新视频下载状态
+	if dm.db != nil && finalStatus == "completed" {
 		if err := dm.db.Model(&models.Video{}).Where("id = ?", video.ID).Update("download_status", 1).Error; err != nil {
 			utils.Warn("更新视频下载状态失败: %v", err)
 		} else {
@@ -1136,11 +1136,15 @@ func (dm *DownloadManager) getVideoSourceInfo(video *models.Video) (sourceType s
 // updateDownloadRecordProgress 更新下载记录中的文件进度
 func (dm *DownloadManager) updateDownloadRecordProgress(videoID uint, taskName string, progress *SubTaskProgress) {
 	// 节流：每500ms最多更新一次DB，减少大文件下载时的写入压力
+	// 终态（succeeded/failed/skipped）不节流，确保最终状态一定写入DB
+	isTerminal := progress.Status == StatusSucceeded || progress.Status == StatusFailed || progress.Status == StatusSkipped
 	key := fmt.Sprintf("%d-%s", videoID, taskName)
 	now := time.Now()
-	if last, ok := dm.lastProgressUpdate.Load(key); ok {
-		if now.Sub(last.(time.Time)) < 500*time.Millisecond {
-			return
+	if !isTerminal {
+		if last, ok := dm.lastProgressUpdate.Load(key); ok {
+			if now.Sub(last.(time.Time)) < 500*time.Millisecond {
+				return
+			}
 		}
 	}
 	dm.lastProgressUpdate.Store(key, now)

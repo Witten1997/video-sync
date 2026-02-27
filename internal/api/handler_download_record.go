@@ -165,7 +165,13 @@ func (s *Server) handleBatchRetryDownloadRecords(c *gin.Context) {
 		return
 	}
 
-	retried := 0
+	// 先重置所有记录状态，收集需要重试的记录
+	type retryItem struct {
+		recordID uint
+		video    models.Video
+	}
+	var items []retryItem
+
 	for _, id := range req.IDs {
 		var record models.DownloadRecord
 		if err := s.db.Preload("Video").First(&record, id).Error; err != nil {
@@ -194,15 +200,22 @@ func (s *Server) handleBatchRetryDownloadRecords(c *gin.Context) {
 		record.CompletedAt = nil
 		s.db.Save(&record)
 
-		if _, err := s.downloadMgr.RetryVideoTask(record.ID, &record.Video, 0); err == nil {
-			retried++
-		}
+		items = append(items, retryItem{recordID: record.ID, video: record.Video})
 	}
 
+	// 立即返回响应
 	respondSuccess(c, gin.H{
-		"retried": retried,
-		"message": "批量重试完成",
+		"retried": len(items),
+		"message": "批量重试已开始",
 	})
+
+	// 异步添加重试任务
+	go func() {
+		for _, item := range items {
+			video := item.video
+			s.downloadMgr.RetryVideoTask(item.recordID, &video, 0)
+		}
+	}()
 }
 
 // handleDeleteDownloadRecord 删除下载记录
