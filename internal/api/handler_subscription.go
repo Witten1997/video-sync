@@ -60,9 +60,6 @@ func (s *Server) handleGetMyFavorites(c *gin.Context) {
 
 // handleGetMyFollowings 获取我关注的UP主列表
 func (s *Server) handleGetMyFollowings(c *gin.Context) {
-	// 检查是否需要获取所有数据（用于搜索）
-	all := c.Query("all") == "true"
-
 	// 获取当前用户信息
 	userInfo, err := s.biliClient.GetMe()
 	if err != nil {
@@ -70,49 +67,20 @@ func (s *Server) handleGetMyFollowings(c *gin.Context) {
 		return
 	}
 
-	// 如果需要获取所有数据
-	if all {
-		followings, err := s.biliClient.GetAllUserFollowings(userInfo.Mid)
-		if err != nil {
-			respondInternalError(c, fmt.Errorf("获取关注列表失败: %w", err))
-			return
-		}
-
-		// 查询已订阅的UP主
-		var subscribedSubmissions []models.Submission
-		s.db.Find(&subscribedSubmissions)
-		subscribedMap := make(map[int64]bool)
-		for _, sub := range subscribedSubmissions {
-			subscribedMap[sub.UpperID] = true
-		}
-
-		// 添加订阅状态
-		type FollowingWithStatus struct {
-			bilibili.FollowingUser
-			Subscribed bool `json:"subscribed"`
-		}
-
-		var result []FollowingWithStatus
-		for _, following := range followings {
-			result = append(result, FollowingWithStatus{
-				FollowingUser: following,
-				Subscribed:    subscribedMap[following.Mid],
-			})
-		}
-
-		respondSuccess(c, gin.H{
-			"list":  result,
-			"total": len(result),
-		})
-		return
-	}
-
 	// 获取分页参数
 	pn, _ := strconv.Atoi(c.DefaultQuery("pn", "1"))
 	ps, _ := strconv.Atoi(c.DefaultQuery("ps", "50"))
+	name := c.Query("name")
 
-	// 获取关注列表
-	followings, total, err := s.biliClient.GetUserFollowings(userInfo.Mid, pn, ps)
+	var followings []bilibili.FollowingUser
+	var total int
+
+	if name != "" {
+		// 使用B站搜索API
+		followings, total, err = s.biliClient.SearchFollowings(userInfo.Mid, name, pn, ps)
+	} else {
+		followings, total, err = s.biliClient.GetUserFollowings(userInfo.Mid, pn, ps)
+	}
 	if err != nil {
 		respondInternalError(c, fmt.Errorf("获取关注列表失败: %w", err))
 		return

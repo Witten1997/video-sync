@@ -249,31 +249,45 @@ func (c *Client) GetUserFollowings(mid int64, pn, ps int) ([]FollowingUser, int,
 	return resp.Data.List, resp.Data.Total, nil
 }
 
-// GetAllUserFollowings 获取用户所有关注的UP主（自动翻页）
-func (c *Client) GetAllUserFollowings(mid int64) ([]FollowingUser, error) {
-	var allFollowings []FollowingUser
-	pn := 1
-	ps := 50
+// SearchFollowings 搜索关注的UP主
+func (c *Client) SearchFollowings(mid int64, name string, pn, ps int) ([]FollowingUser, int, error) {
+	type Response struct {
+		Code int `json:"code"`
 
-	for {
-		list, total, err := c.GetUserFollowings(mid, pn, ps)
-		if err != nil {
-			return nil, err
-		}
-
-		if len(list) == 0 {
-			break
-		}
-
-		allFollowings = append(allFollowings, list...)
-
-		// 检查是否已获取所有数据
-		if len(allFollowings) >= total {
-			break
-		}
-
-		pn++
+		Message string `json:"message"`
+		Data    struct {
+			List  []FollowingUser `json:"list"`
+			Total int             `json:"total"`
+		} `json:"data"`
 	}
 
-	return allFollowings, nil
+	if pn <= 0 {
+		pn = 1
+	}
+	if ps <= 0 || ps > 50 {
+		ps = 50
+	}
+
+	params := url.Values{}
+	params.Set("vmid", strconv.FormatInt(mid, 10))
+	params.Set("name", name)
+	params.Set("pn", strconv.Itoa(pn))
+	params.Set("ps", strconv.Itoa(ps))
+	params.Set("order", "desc")
+	apiURL := "https://api.bilibili.com/x/relation/followings/search?" + params.Encode()
+
+	var resp Response
+	err := c.GetJSON(apiURL, nil, &resp)
+	if err != nil {
+		return nil, 0, fmt.Errorf("搜索关注列表失败: %w", err)
+	}
+
+	if resp.Code != 0 {
+		return nil, 0, &BiliError{
+			Code:    resp.Code,
+			Message: resp.Message,
+		}
+	}
+
+	return resp.Data.List, resp.Data.Total, nil
 }

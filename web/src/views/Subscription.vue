@@ -1,131 +1,12 @@
 <template>
   <div class="subscription-page">
-    <el-tabs v-model="activeTab" type="border-card">
-      <!-- 我的收藏夹 -->
-      <el-tab-pane label="我的收藏夹" name="favorites">
-        <div class="header">
-          <el-input
-            v-model="favoriteSearch"
-            placeholder="搜索收藏夹"
-            style="width: 300px"
-            clearable
-          >
-            <template #prefix>
-              <el-icon><Search /></el-icon>
-            </template>
-          </el-input>
-          <div class="header-actions">
-            <el-radio-group v-model="favoriteViewMode" size="small">
-              <el-radio-button label="list">
-                <el-icon><List /></el-icon>
-                列表
-              </el-radio-button>
-              <el-radio-button label="grid">
-                <el-icon><Grid /></el-icon>
-                卡片
-              </el-radio-button>
-            </el-radio-group>
-            <el-button @click="loadFavorites" :loading="favoritesLoading">
-              <el-icon><Refresh /></el-icon>
-              刷新
-            </el-button>
-          </div>
-        </div>
-
-        <!-- 列表视图 -->
-        <el-table
-          v-if="favoriteViewMode === 'list'"
-          :data="filteredFavorites"
-          style="width: 100%; margin-top: 20px"
-          v-loading="favoritesLoading"
-        >
-          <el-table-column prop="title" label="收藏夹名称" min-width="200">
-            <template #default="{ row }">
-              <div class="folder-info">
-                <img :src="row.cover" class="folder-cover" v-if="row.cover" referrerpolicy="no-referrer" />
-                <span>{{ row.title }}</span>
-              </div>
-            </template>
-          </el-table-column>
-          <el-table-column prop="media_count" label="视频数量" width="100" />
-          <el-table-column prop="fid" label="收藏夹ID" width="150">
-            <template #default="{ row }">
-              <el-tag type="info" size="small">{{ row.fid }}</el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column label="状态" width="100">
-            <template #default="{ row }">
-              <el-tag v-if="row.subscribed" type="success">已订阅</el-tag>
-              <el-tag v-else type="info">未订阅</el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column label="操作" width="150" fixed="right">
-            <template #default="{ row }">
-              <el-button
-                v-if="!row.subscribed"
-                type="primary"
-                size="small"
-                @click="handleSubscribeFavorite(row)"
-              >
-                订阅
-              </el-button>
-              <el-button
-                v-else
-                type="danger"
-                size="small"
-                @click="handleUnsubscribeFavorite(row)"
-              >
-                取消订阅
-              </el-button>
-            </template>
-          </el-table-column>
-        </el-table>
-
-        <!-- 卡片视图 -->
-        <div v-else class="grid-view" v-loading="favoritesLoading">
-          <div v-for="item in filteredFavorites" :key="item.id" class="grid-item">
-            <el-card :body-style="{ padding: '0px' }" shadow="hover">
-              <img :src="item.cover" class="grid-cover" v-if="item.cover" referrerpolicy="no-referrer" />
-              <div class="grid-content">
-                <div class="grid-title">{{ item.title }}</div>
-                <div class="grid-info">
-                  <span>{{ item.media_count }} 个视频</span>
-                  <el-tag v-if="item.subscribed" type="success" size="small">已订阅</el-tag>
-                  <el-tag v-else type="info" size="small">未订阅</el-tag>
-                </div>
-                <div class="grid-fid">FID: {{ item.fid }}</div>
-                <div class="grid-actions">
-                  <el-button
-                    v-if="!item.subscribed"
-                    type="primary"
-                    size="small"
-                    @click="handleSubscribeFavorite(item)"
-                    style="width: 100%"
-                  >
-                    订阅
-                  </el-button>
-                  <el-button
-                    v-else
-                    type="danger"
-                    size="small"
-                    @click="handleUnsubscribeFavorite(item)"
-                    style="width: 100%"
-                  >
-                    取消订阅
-                  </el-button>
-                </div>
-              </div>
-            </el-card>
-          </div>
-        </div>
-      </el-tab-pane>
-
+    <el-tabs v-model="activeTab" type="border-card" @tab-change="handleTabChange">
       <!-- 我关注的UP主 -->
       <el-tab-pane label="我关注的UP主" name="followings">
         <div class="header">
           <el-input
             v-model="followingSearch"
-            placeholder="搜索UP主（可搜索所有关注）"
+            placeholder="搜索UP主"
             style="width: 300px"
             clearable
             @input="handleFollowingSearch"
@@ -135,13 +16,6 @@
             </template>
           </el-input>
           <div class="header-actions">
-            <span
-              v-if="isSearchingFollowings && followingSearch"
-              class="search-tip"
-            >
-              <el-icon><InfoFilled /></el-icon>
-              搜索模式（已加载所有UP主）
-            </span>
             <el-radio-group v-model="followingViewMode" size="small">
               <el-radio-button label="list">
                 <el-icon><List /></el-icon>
@@ -259,7 +133,7 @@
 
         <!-- 分页 -->
         <el-pagination
-          v-if="followingsTotal > 0 && !isSearchingFollowings"
+          v-if="followingsTotal > 0"
           style="margin-top: 20px; text-align: right"
           :current-page="followingsPagination.pn"
           :page-size="followingsPagination.ps"
@@ -269,10 +143,115 @@
           @current-change="handleFollowingPageChange"
           @size-change="handleFollowingSizeChange"
         />
+      </el-tab-pane>
 
-        <!-- 搜索结果提示 -->
-        <div v-if="isSearchingFollowings && followingSearch" style="margin-top: 20px; text-align: center; color: #909399;">
-          找到 {{ filteredFollowings.length }} 个匹配的UP主
+      <!-- 我的收藏夹 -->
+      <el-tab-pane label="我的收藏夹" name="favorites">
+        <div class="header">
+          <div></div>
+          <div class="header-actions">
+            <el-radio-group v-model="favoriteViewMode" size="small">
+              <el-radio-button label="list">
+                <el-icon><List /></el-icon>
+                列表
+              </el-radio-button>
+              <el-radio-button label="grid">
+                <el-icon><Grid /></el-icon>
+                卡片
+              </el-radio-button>
+            </el-radio-group>
+            <el-button @click="loadFavorites" :loading="favoritesLoading">
+              <el-icon><Refresh /></el-icon>
+              刷新
+            </el-button>
+          </div>
+        </div>
+
+        <!-- 列表视图 -->
+        <el-table
+          v-if="favoriteViewMode === 'list'"
+          :data="filteredFavorites"
+          style="width: 100%; margin-top: 20px"
+          v-loading="favoritesLoading"
+        >
+          <el-table-column prop="title" label="收藏夹名称" min-width="200">
+            <template #default="{ row }">
+              <div class="folder-info">
+                <img :src="row.cover" class="folder-cover" v-if="row.cover" referrerpolicy="no-referrer" />
+                <span>{{ row.title }}</span>
+              </div>
+            </template>
+          </el-table-column>
+          <el-table-column prop="media_count" label="视频数量" width="100" />
+          <el-table-column prop="fid" label="收藏夹ID" width="150">
+            <template #default="{ row }">
+              <el-tag type="info" size="small">{{ row.fid }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="状态" width="100">
+            <template #default="{ row }">
+              <el-tag v-if="row.subscribed" type="success">已订阅</el-tag>
+              <el-tag v-else type="info">未订阅</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="操作" width="150" fixed="right">
+            <template #default="{ row }">
+              <el-button
+                v-if="!row.subscribed"
+                type="primary"
+                size="small"
+                @click="handleSubscribeFavorite(row)"
+              >
+                订阅
+              </el-button>
+              <el-button
+                v-else
+                type="danger"
+                size="small"
+                @click="handleUnsubscribeFavorite(row)"
+              >
+                取消订阅
+              </el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+
+        <!-- 卡片视图 -->
+        <div v-else class="grid-view" v-loading="favoritesLoading">
+          <div v-for="item in filteredFavorites" :key="item.id" class="grid-item">
+            <el-card :body-style="{ padding: '0px' }" shadow="hover">
+              <img :src="item.cover" class="grid-cover" v-if="item.cover" referrerpolicy="no-referrer" />
+              <div class="grid-content">
+                <div class="grid-title">{{ item.title }}</div>
+                <div class="grid-info">
+                  <span>{{ item.media_count }} 个视频</span>
+                  <el-tag v-if="item.subscribed" type="success" size="small">已订阅</el-tag>
+                  <el-tag v-else type="info" size="small">未订阅</el-tag>
+                </div>
+                <div class="grid-fid">FID: {{ item.fid }}</div>
+                <div class="grid-actions">
+                  <el-button
+                    v-if="!item.subscribed"
+                    type="primary"
+                    size="small"
+                    @click="handleSubscribeFavorite(item)"
+                    style="width: 100%"
+                  >
+                    订阅
+                  </el-button>
+                  <el-button
+                    v-else
+                    type="danger"
+                    size="small"
+                    @click="handleUnsubscribeFavorite(item)"
+                    style="width: 100%"
+                  >
+                    取消订阅
+                  </el-button>
+                </div>
+              </div>
+            </el-card>
+          </div>
         </div>
       </el-tab-pane>
     </el-tabs>
@@ -311,7 +290,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Search, Refresh, List, Grid, InfoFilled } from '@element-plus/icons-vue'
+import { Search, Refresh, List, Grid } from '@element-plus/icons-vue'
 import {
   getMyFavorites,
   getMyFollowings,
@@ -324,7 +303,7 @@ import {
 } from '@/api/subscription'
 
 // Tab状态
-const activeTab = ref('favorites')
+const activeTab = ref('followings')
 
 // 视图模式
 const favoriteViewMode = ref('grid')
@@ -333,7 +312,6 @@ const followingViewMode = ref('grid')
 // 收藏夹相关
 const favorites = ref<FavoriteFolder[]>([])
 const favoritesLoading = ref(false)
-const favoriteSearch = ref('')
 
 // 关注列表相关
 const followings = ref<FollowingUser[]>([])
@@ -344,8 +322,7 @@ const followingsPagination = ref({
   pn: 1,
   ps: 50
 })
-const isSearchingFollowings = ref(false) // 是否在搜索模式
-let searchTimer: NodeJS.Timeout | null = null // 搜索防抖定时器
+let searchTimer: NodeJS.Timeout | null = null
 
 // 订阅对话框
 const subscribeDialogVisible = ref(false)
@@ -360,25 +337,12 @@ const subscribeTarget = ref<any>(null)
 
 // 过滤后的收藏夹列表
 const filteredFavorites = computed(() => {
-  if (!favoriteSearch.value) {
-    return favorites.value
-  }
-  return favorites.value.filter(item =>
-    item.title.toLowerCase().includes(favoriteSearch.value.toLowerCase())
-  )
+  return favorites.value
 })
 
-// 过滤后的关注列表（在搜索模式下进行前端过滤）
+// 关注列表直接使用原始数据
 const filteredFollowings = computed(() => {
-  if (!followingSearch.value || !isSearchingFollowings.value) {
-    return followings.value
-  }
-  // 搜索模式下，在所有数据中过滤
-  const keyword = followingSearch.value.toLowerCase()
-  return followings.value.filter(item =>
-    item.uname.toLowerCase().includes(keyword) ||
-    item.mid.toString().includes(keyword)
-  )
+  return followings.value
 })
 
 // 加载收藏夹列表
@@ -397,19 +361,20 @@ const loadFavorites = async () => {
 }
 
 // 加载关注列表
-const loadFollowings = async (searchMode = false) => {
+const loadFollowings = async () => {
   followingsLoading.value = true
   try {
-    const params: any = searchMode
-      ? { all: true }
-      : followingsPagination.value
+    const params: any = {
+      ...followingsPagination.value,
+    }
+    if (followingSearch.value.trim()) {
+      params.name = followingSearch.value.trim()
+    }
 
     const res = await getMyFollowings(params)
-    // request拦截器已经提取了data.data，直接使用res
     const data = res as any
     followings.value = Array.isArray(data?.list) ? data.list : []
     followingsTotal.value = data?.total || 0
-    isSearchingFollowings.value = searchMode
   } catch (error: any) {
     console.error('加载关注列表失败:', error)
     ElMessage.error(error.response?.data?.message || error.message || '加载关注列表失败')
@@ -425,24 +390,16 @@ const handleFollowingSearch = () => {
   }
 
   searchTimer = setTimeout(() => {
-    if (followingSearch.value.trim()) {
-      // 有搜索内容，进入搜索模式，获取所有数据
-      loadFollowings(true)
-    } else {
-      // 清空搜索，恢复分页模式
-      followingsPagination.value.pn = 1
-      loadFollowings(false)
-    }
-  }, 500) // 500ms 防抖
+    followingsPagination.value.pn = 1
+    loadFollowings()
+  }, 500)
 }
 
 // 刷新关注列表
 const handleRefreshFollowings = () => {
-  // 清空搜索框并恢复分页模式
   followingSearch.value = ''
-  isSearchingFollowings.value = false
   followingsPagination.value.pn = 1
-  loadFollowings(false)
+  loadFollowings()
 }
 
 // 订阅收藏夹
@@ -557,9 +514,17 @@ const formatTime = (timestamp: number) => {
   return date.toLocaleString('zh-CN')
 }
 
-// 组件挂载时加载数据
+// Tab切换时加载对应数据
+const handleTabChange = (tab: string) => {
+  if (tab === 'favorites' && favorites.value.length === 0) {
+    loadFavorites()
+  } else if (tab === 'followings' && followings.value.length === 0) {
+    loadFollowings()
+  }
+}
+
+// 组件挂载时加载默认Tab数据
 onMounted(() => {
-  loadFavorites()
   loadFollowings()
 })
 </script>
@@ -583,17 +548,6 @@ onMounted(() => {
   gap: 12px;
   align-items: center;
   flex-wrap: wrap;
-}
-
-.search-tip {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 13px;
-  color: #409eff;
-  padding: 4px 8px;
-  background: #ecf5ff;
-  border-radius: 6px;
 }
 
 .folder-info {

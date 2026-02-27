@@ -34,7 +34,7 @@ export function getMyFavorites() {
 }
 
 // 获取我关注的UP主列表
-export function getMyFollowings(params?: { pn?: number; ps?: number }) {
+export function getMyFollowings(params?: { pn?: number; ps?: number; name?: string }) {
   return request.get<{
     list: FollowingUser[]
     total: number

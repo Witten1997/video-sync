@@ -360,6 +360,23 @@ func (st *SyncTask) processVideos(videos []adapter.VideoInfo, source VideoSource
 				continue
 			}
 
+			// 获取视频详情以获取Pages信息
+			if detail, err := st.biliClient.GetVideoDetail(video.BVid); err == nil {
+				pages := make([]adapter.PageInfo, 0, len(detail.Pages))
+				for _, p := range detail.Pages {
+					pages = append(pages, adapter.PageInfo{
+						CID:      p.CID,
+						Page:     p.Page,
+						Part:     p.Part,
+						Duration: p.Duration,
+						Width:    p.Dimension.Width,
+						Height:   p.Dimension.Height,
+					})
+				}
+				video.Pages = pages
+			}
+			time.Sleep(300 * time.Millisecond)
+
 			// 创建视频记录
 			newVideo := st.createVideoModel(video, source)
 			utils.Debug("[%s] 创建视频模型: %s, Pages: %d", st.ID, newVideo.Name, len(newVideo.Pages))

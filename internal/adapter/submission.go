@@ -252,23 +252,6 @@ func (a *SubmissionAdapter) convertToVideoInfo(video bilibili.SubmissionVideo) V
 		AddTime:    time.Unix(video.Created, 0),
 	}
 
-	// 获取视频详情以获取Pages信息
-	if detail, err := a.client.GetVideoDetail(video.BVid); err == nil {
-		// 转换Pages信息
-		pages := make([]PageInfo, 0, len(detail.Pages))
-		for _, p := range detail.Pages {
-			pages = append(pages, PageInfo{
-				CID:      p.CID,
-				Page:     p.Page,
-				Part:     p.Part,
-				Duration: p.Duration,
-				Width:    p.Dimension.Width,
-				Height:   p.Dimension.Height,
-			})
-		}
-		videoInfo.Pages = pages
-	}
-
 	return videoInfo
 }
 
