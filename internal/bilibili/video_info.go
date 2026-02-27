@@ -34,13 +34,12 @@ type Upper struct {
 
 // PageInfo 分P信息
 type PageInfo struct {
-	CID        int64  `json:"cid"`
-	Page       int    `json:"page"`     // 分P编号
-	Part       string `json:"part"`     // 分P标题
-	Duration   int    `json:"duration"` // 时长（秒）
-	Width      int    `json:"dimension.width"`
-	Height     int    `json:"dimension.height"`
-	FirstFrame string `json:"first_frame"` // 封面图
+	CID        int64     `json:"cid"`
+	Page       int       `json:"page"`        // 分P编号
+	Part       string    `json:"part"`        // 分P标题
+	Duration   int       `json:"duration"`    // 时长（秒）
+	Dimension  Dimension `json:"dimension"`   // 分辨率
+	FirstFrame string    `json:"first_frame"` // 封面图
 }
 
 // Dimension 视频尺寸

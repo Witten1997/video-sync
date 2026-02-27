@@ -87,6 +87,10 @@ func Migrate(db *gorm.DB) error {
 		return err
 	}
 
+	// 删除 video/page 表上所有外键约束（改为应用层管理关联）
+	dropAllForeignKeys(db, "video")
+	dropAllForeignKeys(db, "page")
+
 	// 依次迁移每个模型，单独处理错误
 	allModels := []interface{}{
 		&models.Video{},
@@ -109,10 +113,11 @@ func Migrate(db *gorm.DB) error {
 
 	for _, model := range allModels {
 		if err := migrator.AutoMigrate(model); err != nil {
-			// 约束不存在的错误可能来自关联模型的级联迁移，不应跳过当前模型
 			if isConstraintNotExistsError(err) {
-				// 检查当前模型的表是否已创建，未创建则补建
-				if !migrator.HasTable(model) {
+				// GORM 尝试 DROP 不存在的约束导致失败，用原生 SQL 补建缺失列
+				if migrator.HasTable(model) {
+					addMissingColumns(db, migrator, model)
+				} else {
 					if createErr := migrator.CreateTable(model); createErr != nil {
 						return fmt.Errorf("AutoMigrate %T failed: %v, CreateTable also failed: %v", model, err, createErr)
 					}
@@ -126,6 +131,20 @@ func Migrate(db *gorm.DB) error {
 	return nil
 }
 
+// dropAllForeignKeys 动态查询并删除指定表上所有外键约束
+func dropAllForeignKeys(db *gorm.DB, tableName string) {
+	var constraints []string
+	db.Raw(`
+		SELECT constraint_name
+		FROM information_schema.table_constraints
+		WHERE table_name = ? AND constraint_type = 'FOREIGN KEY'
+	`, tableName).Scan(&constraints)
+
+	for _, c := range constraints {
+		db.Exec(fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT IF EXISTS %s", tableName, c))
+	}
+}
+
 // isConstraintNotExistsError 检查是否是约束不存在的错误
 func isConstraintNotExistsError(err error) bool {
 	if err == nil {
@@ -133,6 +152,24 @@ func isConstraintNotExistsError(err error) bool {
 	}
 	errStr := err.Error()
 	return strings.Contains(errStr, "does not exist") && strings.Contains(errStr, "constraint")
+}
+
+// addMissingColumns 对比模型字段，用原生 SQL 补建数据库中缺失的列
+func addMissingColumns(db *gorm.DB, migrator gorm.Migrator, model interface{}) {
+	stmt := &gorm.Statement{DB: db}
+	if err := stmt.Parse(model); err != nil {
+		return
+	}
+	for _, field := range stmt.Schema.Fields {
+		if field.DBName == "" {
+			continue
+		}
+		if !migrator.HasColumn(model, field.DBName) {
+			if err := migrator.AddColumn(model, field.DBName); err != nil {
+				fmt.Printf("[Migrate] AddColumn %s.%s failed: %v\n", stmt.Schema.Table, field.DBName, err)
+			}
+		}
+	}
 }
 
 // manualMigrations 手动处理特殊的数据库迁移

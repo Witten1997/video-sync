@@ -326,6 +326,9 @@
                 <el-radio label="pubtime">发布时间</el-radio>
               </el-radio-group>
             </el-form-item>
+            <el-form-item label="失败重试次数">
+              <el-input-number v-model="config.advanced.max_retry_count" :min="0" :max="10" />
+            </el-form-item>
           </el-form>
         </el-tab-pane>
 
@@ -561,7 +564,8 @@ const config = ref<Config>({
       limit: 4
     },
     nfo_time_type: 'favtime',
-    ytdlp_extra_args: []
+    ytdlp_extra_args: [],
+    max_retry_count: 3
   },
   logging: {
     level: 'info',

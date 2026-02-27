@@ -119,6 +119,7 @@ func createDefaultConfig(v *viper.Viper) (*Config, error) {
 			},
 			NFOTimeType:    "favtime",
 			YtdlpExtraArgs: []string{},
+			MaxRetryCount:  3,
 		},
 		Logging: LoggingConfig{
 			Level:      "info",

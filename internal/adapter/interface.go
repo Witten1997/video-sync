@@ -115,6 +115,8 @@ type PageInfo struct {
 	Page     int    // 分P序号
 	Part     string // 分P标题
 	Duration int    // 时长（秒）
+	Width    int    // 宽度
+	Height   int    // 高度
 }
 
 // StatsInfo 统计信息

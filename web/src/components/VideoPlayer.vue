@@ -59,11 +59,13 @@ import { ElMessage } from 'element-plus'
 interface Props {
   visible: boolean
   video: Video | null
+  initialPage?: Page | null
 }
 
 const props = withDefaults(defineProps<Props>(), {
   visible: false,
-  video: null
+  video: null,
+  initialPage: null
 })
 
 const emit = defineEmits<{
@@ -276,10 +278,12 @@ watch(() => props.visible, (newVal) => {
         // 多P视频：加载分P列表
         if (props.video.pages && props.video.pages.length > 0) {
           pages.value = props.video.pages
-          // 查找第一个已下载的分集
-          const firstDownloadedPage = pages.value.find(p => isDownloadComplete(p.download_status))
-          if (firstDownloadedPage) {
-            loadVideo(props.video, firstDownloadedPage)
+          // 如果指定了初始分集，播放指定分集；否则播放第一个已下载的分集
+          const targetPage = props.initialPage && isDownloadComplete(props.initialPage.download_status)
+            ? props.initialPage
+            : pages.value.find(p => isDownloadComplete(p.download_status))
+          if (targetPage) {
+            loadVideo(props.video, targetPage)
           } else {
             ElMessage.warning('该视频的所有分集尚未下载完成')
           }

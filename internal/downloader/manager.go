@@ -537,8 +537,7 @@ func (dm *DownloadManager) PrepareAndAddVideoTask(video *models.Video, baseDir s
 	// 创建下载任务
 	task := NewDownloadTask(TaskTypeVideo, &videoWithPages, nil, outputDir)
 	task.Priority = priority
-
-	// 创建下载记录
+	task.MaxRetries = dm.getMaxRetries()
 	if dm.db != nil {
 		fileDetails := dm.buildFileDetails(&videoWithPages)
 		detailsJSON, _ := json.Marshal(fileDetails)
@@ -628,6 +627,7 @@ func (dm *DownloadManager) RetryVideoTask(recordID uint, video *models.Video, pr
 	task := NewDownloadTask(TaskTypeVideo, &videoWithPages, nil, outputDir)
 	task.Priority = priority
 	task.RecordID = recordID
+	task.MaxRetries = dm.getMaxRetries()
 
 	if err := dm.AddTask(task); err != nil {
 		return nil, err
@@ -958,6 +958,14 @@ func (dm *DownloadManager) markRecordAsFailed(record *models.DownloadRecord, err
 	dm.db.Model(&models.Page{}).Where("video_id = ?", record.VideoID).Update("download_status", 0)
 
 	utils.Info("已修复记录 ID=%d, 视频ID=%d: %s", record.ID, record.VideoID, errMsg)
+}
+
+// getMaxRetries 获取配置的最大重试次数
+func (dm *DownloadManager) getMaxRetries() int {
+	if dm.config != nil && dm.config.Advanced.MaxRetryCount > 0 {
+		return dm.config.Advanced.MaxRetryCount
+	}
+	return 3
 }
 
 // IsRunning 检查管理器是否在运行

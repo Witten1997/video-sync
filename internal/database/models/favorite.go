@@ -23,7 +23,7 @@ type Favorite struct {
 	LastSuccessAt       *time.Time `json:"last_success_at,omitempty"`              // 最后成功时间
 
 	// 关联
-	Videos []Video `gorm:"foreignKey:FavoriteID;constraint:OnDelete:CASCADE" json:"videos,omitempty"`
+	Videos []Video `gorm:"foreignKey:FavoriteID" json:"videos,omitempty"`
 }
 
 // TableName 指定表名

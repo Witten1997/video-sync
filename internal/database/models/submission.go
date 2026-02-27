@@ -8,6 +8,7 @@ import (
 type Submission struct {
 	ID            uint      `gorm:"primaryKey" json:"id"`
 	UpperID       int64     `gorm:"uniqueIndex;not null" json:"upper_id"` // UP主 ID
+	UpperFace     string    `gorm:"size:500" json:"upper_face"`           // UP主头像
 	Name          string    `gorm:"size:255;not null" json:"name"`
 	Path          string    `gorm:"size:500" json:"path"`
 	Enabled       bool      `gorm:"default:true;index" json:"enabled"`
@@ -24,7 +25,7 @@ type Submission struct {
 	LastSuccessAt       *time.Time `json:"last_success_at,omitempty"`              // 最后成功时间
 
 	// 关联
-	Videos []Video `gorm:"foreignKey:SubmissionID;constraint:OnDelete:CASCADE" json:"videos,omitempty"`
+	Videos []Video `gorm:"foreignKey:SubmissionID" json:"videos,omitempty"`
 }
 
 // TableName 指定表名

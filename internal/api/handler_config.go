@@ -379,6 +379,11 @@ func mergeConfigFromMap(cfg *config.Config, configMap map[string]interface{}) {
 				cfg.Advanced.YtdlpExtraArgs = args
 			}
 		}
+		if maxRetryCount, exists := advancedMap["max_retry_count"]; exists {
+			if v, ok := maxRetryCount.(float64); ok {
+				cfg.Advanced.MaxRetryCount = int(v)
+			}
+		}
 	}
 }
 

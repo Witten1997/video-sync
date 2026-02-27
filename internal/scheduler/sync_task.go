@@ -443,8 +443,8 @@ func (st *SyncTask) createVideoModel(video adapter.VideoInfo, source VideoSource
 			PID:            pageInfo.Page,
 			Name:           pageInfo.Part,
 			Duration:       pageInfo.Duration,
-			Width:          0, // adapter.PageInfo doesn't provide dimension
-			Height:         0, // adapter.PageInfo doesn't provide dimension
+			Width:          pageInfo.Width,
+			Height:         pageInfo.Height,
 			DownloadStatus: 0,
 		}
 		pages = append(pages, page)

@@ -1,6 +1,7 @@
 <template>
   <div class="videos">
     <div class="toolbar">
+      <template v-if="viewMode !== 'source' || selectedSource">
       <el-input
         v-model="searchKeyword"
         placeholder="搜索视频标题或BV号"
@@ -13,6 +14,7 @@
         </template>
       </el-input>
       <el-select
+        v-if="!selectedSource"
         v-model="filterSourceType"
         placeholder="筛选视频源类型"
         clearable
@@ -57,8 +59,9 @@
         <el-icon><Delete /></el-icon>
         批量删除 ({{ selectedVideos.length }})
       </el-button>
+      </template>
       <div class="toolbar-right">
-        <el-radio-group v-model="viewMode" size="small">
+        <el-radio-group v-model="viewMode" size="small" @change="handleViewModeChange">
           <el-radio-button label="list">
             <el-icon><List /></el-icon>
             列表
@@ -66,6 +69,10 @@
           <el-radio-button label="grid">
             <el-icon><Grid /></el-icon>
             卡片
+          </el-radio-button>
+          <el-radio-button label="source">
+            <el-icon><FolderOpened /></el-icon>
+            视频源
           </el-radio-button>
         </el-radio-group>
         <el-button @click="loadData">
@@ -125,9 +132,60 @@
       </template>
     </el-dialog>
 
-    <!-- 列表视图 -->
+    <!-- 视频源视图 -->
+    <template v-if="viewMode === 'source'">
+      <!-- 源内视频列表 -->
+      <template v-if="selectedSource">
+        <div class="source-breadcrumb">
+          <el-button text @click="exitSourceDetail">
+            <el-icon><ArrowLeft /></el-icon>
+            返回视频源
+          </el-button>
+          <el-tag :type="getSourceTypeColor(selectedSource.type)" size="small">
+            {{ getSourceTypeName(selectedSource.type) }}
+          </el-tag>
+          <span class="source-breadcrumb-name">{{ selectedSource.name }}</span>
+          <el-radio-group v-model="sourceSubView" size="small" style="margin-left: auto;">
+            <el-radio-button label="list">
+              <el-icon><List /></el-icon>
+            </el-radio-button>
+            <el-radio-button label="grid">
+              <el-icon><Grid /></el-icon>
+            </el-radio-button>
+          </el-radio-group>
+        </div>
+      </template>
+
+      <!-- 视频源网格 -->
+      <div v-else v-loading="sourceLoading" class="source-grid">
+        <div
+          v-for="item in sourcesData"
+          :key="item.type + '-' + item.id"
+          class="source-card"
+          @click="enterSourceDetail(item)"
+        >
+          <div v-if="item.type === 'submission' && item.upper_face" class="source-card-avatar">
+            <img :src="getProxiedImageUrl(item.upper_face)" loading="lazy" />
+          </div>
+          <div v-else class="source-card-icon" :class="'source-type-' + item.type">
+            <el-icon :size="24">
+              <Star v-if="item.type === 'favorite'" />
+              <Clock v-else-if="item.type === 'watch_later'" />
+              <Collection v-else-if="item.type === 'collection'" />
+              <User v-else />
+            </el-icon>
+          </div>
+          <div class="source-card-name" :title="item.name">{{ item.name }}</div>
+          <el-tag size="small" :type="getSourceTypeColor(item.type)">
+            {{ getSourceTypeName(item.type) }}
+          </el-tag>
+        </div>
+      </div>
+    </template>
+
+    <!-- 列表视图（也用于源内列表） -->
     <el-table
-      v-if="viewMode === 'list'"
+      v-if="showListView"
       v-loading="loading"
       :data="videos"
       border
@@ -211,7 +269,7 @@
     </el-table>
 
     <!-- 卡片视图 -->
-    <div v-else class="grid-view" v-loading="loading">
+    <div v-if="showGridView" class="grid-view" v-loading="loading">
       <div v-for="item in videos" :key="item.id" class="grid-item">
         <el-card :body-style="{ padding: '0px' }" shadow="hover">
           <div class="grid-cover-wrapper">
@@ -278,7 +336,7 @@
       </div>
     </div>
 
-    <div class="pagination">
+    <div v-if="viewMode !== 'source' || selectedSource" class="pagination">
       <el-pagination
         v-model:current-page="currentPage"
         v-model:page-size="pageSize"
@@ -299,13 +357,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Search, Link, List, Grid, VideoPlay, View, Download, Delete, Refresh, Picture, Sort } from '@element-plus/icons-vue'
+import { Search, Link, List, Grid, VideoPlay, View, Download, Delete, Refresh, Picture, Sort, FolderOpened, ArrowLeft, Star, Clock, Collection, User } from '@element-plus/icons-vue'
 import { getVideos, deleteVideo, redownloadVideo, downloadVideoByURL, getVideoPages } from '@/api/video'
+import { getVideoSources } from '@/api/video-source'
 import { getProxiedImageUrl } from '@/utils/image'
-import type { Video } from '@/types'
+import type { Video, VideoSource } from '@/types'
 import dayjs from 'dayjs'
 import VideoPlayer from '@/components/VideoPlayer.vue'
 
@@ -321,10 +380,28 @@ const filterSourceType = ref('')
 const currentPage = ref(1)
 const pageSize = ref(20)
 const total = ref(0)
-const viewMode = ref<'list' | 'grid'>('grid')
+const viewMode = ref<'list' | 'grid' | 'source'>('grid')
 const selectedVideos = ref<Video[]>([])
 const sortBy = ref('pubtime')
 const sortOrder = ref('desc')
+
+// 视频源视图相关
+const sourceLoading = ref(false)
+const sourcesData = ref<VideoSource[]>([])
+const selectedSource = ref<VideoSource | null>(null)
+const sourceSubView = ref<'list' | 'grid'>('grid')
+
+// 计算属性：是否显示列表/卡片视图
+const showListView = computed(() => {
+  if (viewMode.value === 'list') return true
+  if (viewMode.value === 'source' && selectedSource.value && sourceSubView.value === 'list') return true
+  return false
+})
+const showGridView = computed(() => {
+  if (viewMode.value === 'grid') return true
+  if (viewMode.value === 'source' && selectedSource.value && sourceSubView.value === 'grid') return true
+  return false
+})
 // URL下载对话框
 const downloadDialogVisible = ref(false)
 const downloadLoading = ref(false)
@@ -374,14 +451,20 @@ const handleDownloadByURL = async () => {
 const loadData = async () => {
   loading.value = true
   try {
-    const result = await getVideos({
+    const params: Record<string, any> = {
       page: currentPage.value,
       page_size: pageSize.value,
       keyword: searchKeyword.value,
       source_type: filterSourceType.value,
       sort_by: sortBy.value,
       sort_order: sortOrder.value
-    })
+    }
+    // 如果在视频源视图中选中了某个源，按源过滤
+    if (selectedSource.value) {
+      params.source_type = selectedSource.value.type
+      params.source_id = selectedSource.value.id
+    }
+    const result = await getVideos(params)
     videos.value = result.items || []
     total.value = result.total
   } catch (error) {
@@ -574,6 +657,46 @@ const handleBatchDelete = async () => {
   }
 }
 
+// 视频源视图相关方法
+const loadSources = async () => {
+  sourceLoading.value = true
+  try {
+    const result = await getVideoSources()
+    sourcesData.value = (result.items || []).filter(s => s.enabled)
+  } catch (error) {
+    console.error('加载视频源失败:', error)
+  } finally {
+    sourceLoading.value = false
+  }
+}
+
+const handleViewModeChange = (mode: string) => {
+  if (mode === 'source') {
+    selectedSource.value = null
+    loadSources()
+  }
+}
+
+const enterSourceDetail = (source: VideoSource) => {
+  selectedSource.value = source
+  currentPage.value = 1
+  loadData()
+}
+
+const exitSourceDetail = () => {
+  selectedSource.value = null
+}
+
+const getSourceTypeName = (type: string) => {
+  const map: Record<string, string> = { favorite: '收藏夹', watch_later: '稍后再看', collection: '合集', submission: 'UP主投稿' }
+  return map[type] || type
+}
+
+const getSourceTypeColor = (type: string) => {
+  const map: Record<string, string> = { favorite: 'primary', watch_later: 'success', collection: 'warning', submission: 'danger' }
+  return map[type] || ''
+}
+
 onMounted(() => {
   loadData()
 })
@@ -749,5 +872,85 @@ onMounted(() => {
 
 .grid-actions .el-button {
   flex: 1;
+}
+
+/* 视频源视图样式 */
+.source-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+  padding: 8px 0;
+}
+
+.source-breadcrumb-name {
+  font-size: 16px;
+  font-weight: 500;
+  color: #1e293b;
+}
+
+.source-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 16px;
+  margin-top: 20px;
+}
+
+.source-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 20px 12px;
+  border: 1px solid #f1f5f9;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+  background: #fff;
+}
+
+.source-card:hover {
+  border-color: #e2e8f0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+
+.source-card-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+}
+
+.source-card-avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.source-card-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.source-type-favorite { background: #409eff; }
+.source-type-watch_later { background: #67c23a; }
+.source-type-collection { background: #e6a23c; }
+.source-type-submission { background: #f56c6c; }
+
+.source-card-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: #1e293b;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
 }
 </style>

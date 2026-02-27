@@ -191,6 +191,7 @@ func (s *Server) setupRouter() {
 		maintenance := api.Group("/maintenance")
 		{
 			maintenance.POST("/refresh-view-counts", s.handleRefreshViewCounts)
+			maintenance.POST("/refresh-upper-faces", s.handleRefreshUpperFaces)
 		}
 
 		// 快捷订阅

@@ -241,6 +241,8 @@ func (a *FavoriteAdapter) convertToVideoInfo(media bilibili.FavoriteMedia) Video
 				Page:     p.Page,
 				Part:     p.Part,
 				Duration: p.Duration,
+				Width:    p.Dimension.Width,
+				Height:   p.Dimension.Height,
 			})
 		}
 		videoInfo.Pages = pages

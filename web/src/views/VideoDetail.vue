@@ -104,6 +104,7 @@
     <VideoPlayer
       v-model:visible="playerVisible"
       :video="currentPlayingVideo"
+      :initial-page="currentPlayingPage"
     />
   </div>
 </template>
@@ -132,6 +133,7 @@ const pages = ref<Page[]>([])
 // 播放器相关
 const playerVisible = ref(false)
 const currentPlayingVideo = ref<Video | null>(null)
+const currentPlayingPage = ref<Page | null>(null)
 
 const videoId = Number(route.params.id)
 
@@ -171,6 +173,7 @@ const handlePlay = () => {
 
   const videoWithPages = { ...video.value, pages: pages.value }
   currentPlayingVideo.value = videoWithPages
+  currentPlayingPage.value = null
   playerVisible.value = true
 }
 
@@ -185,13 +188,8 @@ const handlePlayPage = (page: Page) => {
 
   const videoWithPages = { ...video.value, pages: pages.value }
   currentPlayingVideo.value = videoWithPages
+  currentPlayingPage.value = page
   playerVisible.value = true
-
-  // 延迟切换到指定分集
-  setTimeout(() => {
-    // VideoPlayer 组件会自动加载第一个已下载的分集
-    // 这里可以扩展为直接播放指定分集
-  }, 100)
 }
 
 // 格式化时间

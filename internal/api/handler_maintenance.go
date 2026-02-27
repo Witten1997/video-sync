@@ -83,7 +83,61 @@ func (s *Server) doRefreshViewCounts() {
 	utils.Info("刷新播放量完成: 共 %d 个，成功 %d 个，失败 %d 个", len(videos), updated, failed)
 }
 
-// updateNFOViewCount 更新视频的NFO文件中的播放量
+// refreshUpperFaceRunning 防止重复执行
+var refreshUpperFaceRunning atomic.Bool
+
+// handleRefreshUpperFaces 刷新UP主投稿的头像
+func (s *Server) handleRefreshUpperFaces(c *gin.Context) {
+	if !refreshUpperFaceRunning.CompareAndSwap(false, true) {
+		respondError(c, 409, "刷新头像任务正在执行中，请稍后再试")
+		return
+	}
+
+	var count int64
+	s.db.Model(&models.Submission{}).Count(&count)
+
+	go s.doRefreshUpperFaces()
+
+	respondSuccess(c, gin.H{
+		"total":   count,
+		"message": fmt.Sprintf("已开始刷新 %d 个UP主的头像", count),
+	})
+}
+
+func (s *Server) doRefreshUpperFaces() {
+	defer refreshUpperFaceRunning.Store(false)
+
+	var submissions []models.Submission
+	if err := s.db.Find(&submissions).Error; err != nil {
+		utils.Error("刷新UP主头像查询失败: %v", err)
+		return
+	}
+
+	updated := 0
+	failed := 0
+
+	for _, sub := range submissions {
+		info, err := s.biliClient.GetUpperInfo(sub.UpperID)
+		if err != nil {
+			utils.Warn("获取UP主 %s (ID:%d) 信息失败: %v", sub.Name, sub.UpperID, err)
+			failed++
+			continue
+		}
+
+		if info.Face != "" && info.Face != sub.UpperFace {
+			if err := s.db.Model(&sub).Update("upper_face", info.Face).Error; err != nil {
+				utils.Warn("更新UP主 %s 头像失败: %v", sub.Name, err)
+				failed++
+				continue
+			}
+			updated++
+		}
+
+		time.Sleep(200 * time.Millisecond)
+	}
+
+	utils.Info("刷新UP主头像完成: 共 %d 个，更新 %d 个，失败 %d 个", len(submissions), updated, failed)
+}
 func (s *Server) updateNFOViewCount(video *models.Video, outputDir string) {
 	for _, page := range video.Pages {
 		var nfoFile string

@@ -10,6 +10,7 @@
         <el-select v-model="selectedTask" placeholder="选择维护任务" style="width: 280px;">
           <el-option label="刷新播放量" value="refresh_view_counts" />
           <el-option label="检查下载状态" value="repair_download" />
+          <el-option label="刷新UP主头像" value="refresh_upper_faces" />
         </el-select>
         <el-button type="primary" :loading="running" :disabled="!selectedTask" @click="handleExecute">
           执行
@@ -25,7 +26,7 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
-import { refreshViewCounts } from '@/api/maintenance'
+import { refreshViewCounts, refreshUpperFaces } from '@/api/maintenance'
 import { repairDownloadRecords } from '@/api/download-records'
 
 defineOptions({ name: 'Maintenance' })
@@ -54,6 +55,10 @@ const handleExecute = async () => {
         resultMessage.value = '未发现异常记录'
         resultType.value = 'info'
       }
+    } else if (selectedTask.value === 'refresh_upper_faces') {
+      const data = await refreshUpperFaces()
+      resultMessage.value = data.message
+      resultType.value = 'success'
     }
   } catch (error: any) {
     resultMessage.value = error?.response?.data?.message || error?.message || '执行失败'

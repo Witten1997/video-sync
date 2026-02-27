@@ -113,6 +113,7 @@ type AdvancedConfig struct {
 	RateLimit       RateLimitConfig       `yaml:"rate_limit" mapstructure:"rate_limit" json:"rate_limit"`
 	NFOTimeType     string                `yaml:"nfo_time_type" mapstructure:"nfo_time_type" json:"nfo_time_type"`
 	YtdlpExtraArgs  []string              `yaml:"ytdlp_extra_args" mapstructure:"ytdlp_extra_args" json:"ytdlp_extra_args"`
+	MaxRetryCount   int                   `yaml:"max_retry_count" mapstructure:"max_retry_count" json:"max_retry_count"`
 }
 
 // ConcurrentLimitConfig 并发限制配置

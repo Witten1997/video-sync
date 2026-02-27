@@ -101,6 +101,7 @@ func (s *Server) handleListSources(c *gin.Context) {
 			"path":         sub.Path,
 			"mid":          strconv.FormatInt(sub.UpperID, 10),
 			"upper_id":     sub.UpperID,
+			"upper_face":   sub.UpperFace,
 			"enabled":      sub.Enabled,
 			"last_scan_at": sub.LastScanAt,
 			"video_count":  len(sub.Videos),
@@ -227,15 +228,27 @@ func (s *Server) handleAddSource(c *gin.Context) {
 			return
 		}
 
+		// 获取UP主信息
+		upperInfo, err := s.biliClient.GetUpperInfo(parsed.ID)
+		var upperFace string
+		if err == nil && upperInfo != nil {
+			upperFace = upperInfo.Face
+		}
+
 		// 创建新 UP 主投稿
 		name := req.Name
 		if name == "" {
-			name = fmt.Sprintf("UP主-%d", parsed.ID)
+			if upperInfo != nil && upperInfo.Uname != "" {
+				name = upperInfo.Uname
+			} else {
+				name = fmt.Sprintf("UP主-%d", parsed.ID)
+			}
 		}
 		submission = models.Submission{
-			UpperID: parsed.ID,
-			Name:    name,
-			Enabled: true,
+			UpperID:   parsed.ID,
+			UpperFace: upperFace,
+			Name:      name,
+			Enabled:   true,
 		}
 		if err := s.db.Create(&submission).Error; err != nil {
 			respondInternalError(c, fmt.Errorf("创建UP主投稿失败: %w", err))

@@ -35,7 +35,7 @@ type Video struct {
 	SubmissionID *uint `gorm:"index" json:"submission_id,omitempty"`
 
 	// 关联
-	Pages []Page `gorm:"foreignKey:VideoID;constraint:OnDelete:CASCADE" json:"pages,omitempty"`
+	Pages []Page `gorm:"foreignKey:VideoID" json:"pages,omitempty"`
 
 	CreatedAt time.Time `json:"created_at"`
 }

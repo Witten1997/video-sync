@@ -224,11 +224,12 @@ func (s *Server) handleSubscribeUpper(c *gin.Context) {
 	}
 
 	submission := models.Submission{
-		UpperID: req.ID,
-		Name:    name,
-		Path:    req.Path,
-		Enabled: true,
-		Rule:    "{}",
+		UpperID:   req.ID,
+		UpperFace: upperInfo.Face,
+		Name:      name,
+		Path:      req.Path,
+		Enabled:   true,
+		Rule:      "{}",
 	}
 
 	if err := s.db.Create(&submission).Error; err != nil {

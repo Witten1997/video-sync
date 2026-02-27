@@ -21,6 +21,8 @@ export interface VideoSource {
   // 特定类型的字段
   f_id?: string // 收藏夹ID
   mid?: string // UP主ID/合集UP主ID
+  upper_id?: number // UP主ID
+  upper_face?: string // UP主头像
   season_id?: string // 合集ID
   series_id?: string // 系列ID
   collection_type?: string // 合集类型
