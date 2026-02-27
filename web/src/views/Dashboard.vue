@@ -385,6 +385,20 @@ const loadSystemStats = async () => {
     const data = await getSystemStats()
     systemStats.value = data
 
+    // 更新视频和任务统计
+    if (data.videos) {
+      dashboardStats.value.downloaded_videos = data.videos.downloaded
+      dashboardStats.value.pending_videos = data.videos.pending
+      dashboardStats.value.total_videos = data.videos.total
+    }
+    if (data.tasks) {
+      dashboardStats.value.total_tasks = data.tasks.total
+      dashboardStats.value.running_tasks = data.tasks.running
+      dashboardStats.value.completed_tasks = data.tasks.completed
+      dashboardStats.value.failed_tasks = data.tasks.failed
+      dashboardStats.value.pending_tasks = data.tasks.pending
+    }
+
     const now = dayjs().format('HH:mm:ss')
     timeLabels.value.push(now)
     cpuData.value.push(data.cpu?.percent || 0)

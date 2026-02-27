@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bili-download/internal/database/models"
 	"runtime"
 	"time"
 
@@ -59,6 +60,14 @@ func (s *Server) handleSystemStats(c *gin.Context) {
 	// 内存信息
 	memStats, _ := mem.VirtualMemory()
 
+	// 视频统计
+	var totalVideos, downloadedVideos int64
+	s.db.Model(&models.Video{}).Count(&totalVideos)
+	s.db.Model(&models.Video{}).Where("download_status != ?", 0).Count(&downloadedVideos)
+
+	// 任务统计
+	taskStats := s.downloadMgr.GetStats()
+
 	respondSuccess(c, gin.H{
 		"cpu": gin.H{
 			"percent": cpuValue,
@@ -84,6 +93,18 @@ func (s *Server) handleSystemStats(c *gin.Context) {
 		"download_manager": gin.H{
 			"running": s.downloadMgr.IsRunning(),
 			"stats":   s.downloadMgr.GetStats(),
+		},
+		"videos": gin.H{
+			"total":      totalVideos,
+			"downloaded": downloadedVideos,
+			"pending":    totalVideos - downloadedVideos,
+		},
+		"tasks": gin.H{
+			"total":     taskStats.TotalTasks,
+			"running":   taskStats.RunningTasks,
+			"completed": taskStats.CompletedTasks,
+			"failed":    taskStats.FailedTasks,
+			"pending":   taskStats.QueuedTasks,
 		},
 		"timestamp": time.Now().Unix(),
 	})
