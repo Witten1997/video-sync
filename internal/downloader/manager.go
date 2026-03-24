@@ -13,6 +13,7 @@ import (
 	"bili-download/internal/bilibili"
 	"bili-download/internal/config"
 	"bili-download/internal/database/models"
+	"bili-download/internal/nfo"
 	"bili-download/internal/utils"
 
 	"gorm.io/gorm"
@@ -232,6 +233,13 @@ func (dm *DownloadManager) scheduleNextTask() {
 			go dm.executeVideoTask(task)
 		} else {
 			// 放回队列
+			dm.queue.Enqueue(task)
+		}
+	case TaskTypeYtdlp:
+		if dm.concurrency.CanStartVideo() {
+			dm.wg.Add(1)
+			go dm.executeYtdlpTask(task)
+		} else {
 			dm.queue.Enqueue(task)
 		}
 	case TaskTypePage:
@@ -572,6 +580,261 @@ func (dm *DownloadManager) PrepareAndAddVideoTask(video *models.Video, baseDir s
 	utils.Info("已为视频 [%s] 创建下载任务，输出目录: %s，Pages数量: %d", videoWithPages.Name, outputDir, len(videoWithPages.Pages))
 	utils.Debug("视频Path字段已更新为: %s", video.Path)
 	return task, nil
+}
+
+// PrepareAndAddYtdlpTask 创建yt-dlp下载任务
+func (dm *DownloadManager) PrepareAndAddYtdlpTask(video *models.Video, url string, baseDir string) (*DownloadTask, error) {
+	// 创建视频目录
+	videoFolderName := utils.Filenamify(video.Name)
+	outputDir := filepath.Join(baseDir, videoFolderName)
+	if err := os.MkdirAll(outputDir, 0755); err != nil {
+		return nil, fmt.Errorf("创建视频目录失败: %w", err)
+	}
+
+	// 更新视频路径
+	if dm.db != nil {
+		video.Path = outputDir
+		dm.db.Model(video).Update("path", outputDir)
+	}
+
+	// 创建下载任务
+	task := NewDownloadTask(TaskTypeYtdlp, video, nil, outputDir)
+	task.URL = url
+	task.MaxRetries = dm.getMaxRetries()
+
+	// 创建下载记录
+	if dm.db != nil {
+		fileDetails := dm.buildYtdlpFileDetails()
+		detailsJSON, _ := json.Marshal(fileDetails)
+
+		record := &models.DownloadRecord{
+			VideoID:     video.ID,
+			SourceType:  "url",
+			SourceName:  "URL下载",
+			Status:      "pending",
+			FileDetails: detailsJSON,
+		}
+		if err := dm.db.Create(record).Error; err != nil {
+			utils.Warn("创建下载记录失败: %v", err)
+		} else {
+			task.RecordID = record.ID
+			record.Video = *video
+			dm.emitEvent(ManagerEvent{
+				Type:      EventRecordCreated,
+				Task:      task,
+				Record:    record,
+				Timestamp: time.Now(),
+			})
+		}
+	}
+
+	if err := dm.AddTask(task); err != nil {
+		return nil, err
+	}
+
+	utils.Info("已创建yt-dlp下载任务: [%s], URL: %s", video.Name, url)
+	return task, nil
+}
+
+// executeYtdlpTask 执行yt-dlp下载任务
+func (dm *DownloadManager) executeYtdlpTask(task *DownloadTask) {
+	defer dm.wg.Done()
+
+	if err := dm.concurrency.AcquireVideo(task.Context); err != nil {
+		task.SetError(err)
+		task.SetStatus(TaskStatusCancelled)
+		return
+	}
+	defer dm.concurrency.ReleaseVideo()
+
+	dm.runningTasks.Store(task.ID, task)
+	defer func() {
+		dm.runningTasks.Delete(task.ID)
+		dm.completedTasks.Store(task.ID, task)
+	}()
+
+	task.SetStatus(TaskStatusRunning)
+	dm.emitEvent(ManagerEvent{
+		Type:      EventTaskStarted,
+		Task:      task,
+		Timestamp: time.Now(),
+	})
+
+	// 更新下载记录状态
+	if dm.db != nil && task.RecordID > 0 {
+		now := time.Now()
+		dm.db.Model(&models.DownloadRecord{}).Where("id = ?", task.RecordID).
+			Updates(map[string]interface{}{"status": "downloading", "started_at": now})
+	}
+
+	video := task.Video
+
+	// 通过 tracker 通知进度（复用B站下载的进度更新机制）
+	notifyStatus := func(taskName string, status DownloadStatus, progress float64, downloaded, total int64) {
+		dm.tracker.NotifyProgress(video.ID, 0, taskName, &SubTaskProgress{
+			Name:           taskName,
+			Status:         status,
+			Progress:       progress,
+			DownloadedSize: downloaded,
+			TotalSize:      total,
+		})
+	}
+
+	// 使用yt-dlp下载视频
+	ytdlp := NewYtdlpDownloader(dm.config, dm.tracker)
+	videoFileName := utils.Filenamify(video.Name)
+	opts := &DownloadOptions{
+		URL:            task.URL,
+		OutputPath:     task.OutputDir,
+		OutputTemplate: videoFileName + ".%(ext)s",
+		Format:         "bestvideo+bestaudio/best",
+		WriteSubtitles: !dm.config.Download.SkipSubtitle,
+		WriteThumbnail: !dm.config.Download.SkipPoster,
+	}
+
+	notifyStatus("video", StatusDownloading, 0, 0, 0)
+
+	err := ytdlp.DownloadWithRetry(task.Context, opts, task.MaxRetries, func(info *ProgressInfo) {
+		totalBytes := info.TotalBytes
+		if totalBytes <= 0 {
+			totalBytes = info.TotalBytesEst
+		}
+		notifyStatus("video", StatusDownloading, info.Percentage, info.DownloadedBytes, totalBytes)
+	})
+
+	if err != nil {
+		utils.Error("yt-dlp下载失败: %v", err)
+		task.SetError(err)
+		task.SetStatus(TaskStatusFailed)
+		notifyStatus("video", StatusFailed, 0, 0, 0)
+		if dm.db != nil && task.RecordID > 0 {
+			now := time.Now()
+			dm.db.Model(&models.DownloadRecord{}).Where("id = ?", task.RecordID).
+				Updates(map[string]interface{}{
+					"status":        "failed",
+					"error_message": err.Error(),
+					"completed_at":  now,
+				})
+		}
+		dm.handleTaskFailure(task)
+		return
+	}
+
+	// 扫描输出目录获取视频文件大小
+	var videoSize int64
+	entries, _ := os.ReadDir(task.OutputDir)
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		if strings.HasSuffix(name, ".mp4") || strings.HasSuffix(name, ".mkv") || strings.HasSuffix(name, ".webm") {
+			if fi, err := entry.Info(); err == nil {
+				videoSize = fi.Size()
+			}
+			break
+		}
+	}
+	notifyStatus("video", StatusSucceeded, 100, videoSize, videoSize)
+
+	// 封面（yt-dlp的--write-thumbnail已处理）
+	if !dm.config.Download.SkipPoster {
+		var posterSize int64
+		for _, entry := range entries {
+			name := entry.Name()
+			if strings.HasSuffix(name, ".jpg") || strings.HasSuffix(name, ".png") || strings.HasSuffix(name, ".webp") {
+				if fi, err := entry.Info(); err == nil {
+					posterSize = fi.Size()
+				}
+				break
+			}
+		}
+		notifyStatus("poster", StatusSucceeded, 100, posterSize, posterSize)
+	}
+
+	// 生成NFO文件
+	if !dm.config.Download.SkipVideoNFO {
+		notifyStatus("nfo", StatusDownloading, 0, 0, 0)
+		if err := dm.generateYtdlpNFO(video, task.OutputDir); err != nil {
+			utils.Warn("生成NFO失败: %v", err)
+			notifyStatus("nfo", StatusFailed, 0, 0, 0)
+		} else {
+			nfoPath := filepath.Join(task.OutputDir, videoFileName+".nfo")
+			var nfoSize int64
+			if fi, err := os.Stat(nfoPath); err == nil {
+				nfoSize = fi.Size()
+			}
+			notifyStatus("nfo", StatusSucceeded, 100, nfoSize, nfoSize)
+		}
+	}
+
+	// 更新下载记录为完成
+	task.SetStatus(TaskStatusCompleted)
+	if dm.db != nil && task.RecordID > 0 {
+		now := time.Now()
+		dm.db.Model(&models.DownloadRecord{}).Where("id = ?", task.RecordID).
+			Updates(map[string]interface{}{
+				"status":       "completed",
+				"completed_at": now,
+			})
+	}
+
+	// 更新视频下载状态
+	if dm.db != nil {
+		dm.db.Model(&models.Video{}).Where("id = ?", video.ID).Update("download_status", 1)
+	}
+
+	dm.emitEvent(ManagerEvent{
+		Type:      EventTaskCompleted,
+		Task:      task,
+		Timestamp: time.Now(),
+	})
+}
+
+// buildYtdlpFileDetails 构建yt-dlp下载的文件详情
+func (dm *DownloadManager) buildYtdlpFileDetails() models.FileDetailsData {
+	files := []models.FileDetail{
+		{Name: "video", Label: "视频", Status: "pending"},
+	}
+	if dm.config != nil {
+		if !dm.config.Download.SkipPoster {
+			files = append(files, models.FileDetail{Name: "poster", Label: "封面", Status: "pending"})
+		}
+		if !dm.config.Download.SkipVideoNFO {
+			files = append(files, models.FileDetail{Name: "nfo", Label: "NFO", Status: "pending"})
+		}
+	}
+	return models.FileDetailsData{Files: files}
+}
+
+// generateYtdlpNFO 为yt-dlp下载的视频生成NFO文件
+func (dm *DownloadManager) generateYtdlpNFO(video *models.Video, outputDir string) error {
+	nfoFile := fmt.Sprintf("%s.nfo", utils.Filenamify(video.Name))
+	nfoPath := filepath.Join(outputDir, nfoFile)
+
+	generator := nfo.NewMovieGenerator()
+	generator.
+		SetTitle(video.Name).
+		SetOriginalTitle(video.Name).
+		SetPlot(video.Intro).
+		SetPremiered(video.PubTime).
+		SetDateAdded(video.CreatedAt).
+		SetDirector(video.UpperName).
+		AddUniqueID("bvid", video.BVid, true)
+
+	if video.UpperName != "" {
+		generator.AddActor(video.UpperName, "UP主", video.UpperFace)
+	}
+
+	if video.Cover != "" {
+		generator.AddThumb(video.Cover, "poster")
+	}
+
+	if video.Tags != nil {
+		generator.AddTags(video.Tags)
+	}
+
+	return generator.WriteToFile(nfoPath)
 }
 
 // RetryVideoTask 基于已有下载记录重试视频下载（不创建新记录）
@@ -1137,6 +1400,9 @@ func (dm *DownloadManager) getVideoSourceInfo(video *models.Video) (sourceType s
 		if dm.db.First(&wl, sourceID).Error == nil {
 			sourceName = wl.Name
 		}
+	} else {
+		sourceType = "url"
+		sourceName = "URL下载"
 	}
 	return
 }

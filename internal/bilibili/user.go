@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/url"
 	"strconv"
+	"time"
 )
 
 // UserInfo 用户信息
@@ -43,8 +44,13 @@ type UserCollection struct {
 	UpperName string `json:"upper_name"` // UP主名称
 }
 
-// GetMe 获取当前登录用户信息
+// GetMe 获取当前登录用户信息（带缓存，10分钟过期）
 func (c *Client) GetMe() (*UserInfo, error) {
+	// 缓存有效则直接返回
+	if c.cachedUserInfo != nil && time.Since(c.userCachedAt) < 10*time.Minute {
+		return c.cachedUserInfo, nil
+	}
+
 	type NavResponse struct {
 		Code    int    `json:"code"`
 		Message string `json:"message"`
@@ -82,7 +88,7 @@ func (c *Client) GetMe() (*UserInfo, error) {
 		}
 	}
 
-	return &UserInfo{
+	info := &UserInfo{
 		Mid:       resp.Data.Mid,
 		Uname:     resp.Data.Uname,
 		Face:      resp.Data.Face,
@@ -90,7 +96,12 @@ func (c *Client) GetMe() (*UserInfo, error) {
 		Level:     resp.Data.LevelInfo.CurrentLevel,
 		VipType:   resp.Data.VipType,
 		VipStatus: resp.Data.VipStatus,
-	}, nil
+	}
+
+	c.cachedUserInfo = info
+	c.userCachedAt = time.Now()
+
+	return info, nil
 }
 
 // CheckCredentialValid 检查凭据是否有效

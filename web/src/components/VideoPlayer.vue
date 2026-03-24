@@ -14,7 +14,9 @@
       <div class="player-wrapper">
         <video
           ref="videoPlayerRef"
-          class="video-js vjs-big-play-centered"
+          controls
+          preload="auto"
+          class="native-player"
         ></video>
       </div>
 
@@ -51,11 +53,8 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onBeforeUnmount } from 'vue'
-import videojs from 'video.js'
-import 'video.js/dist/video-js.css'
 import type { Video, Page } from '@/types'
 import { ElMessage } from 'element-plus'
-
 interface Props {
   visible: boolean
   video: Video | null
@@ -73,7 +72,6 @@ const emit = defineEmits<{
 }>()
 
 const videoPlayerRef = ref<HTMLVideoElement>()
-let player: any = null
 const currentPage = ref<Page | null>(null)
 const pages = ref<Page[]>([])
 
@@ -151,85 +149,22 @@ const buildVideoUrl = (video: Video, page?: Page): string => {
   return `/downloads/${videoFolder}/${fileName}`
 }
 
-// 初始化播放器
-const initPlayer = () => {
-  if (!videoPlayerRef.value) return
-
-  player = videojs(videoPlayerRef.value, {
-    controls: true,
-    autoplay: false,
-    preload: 'auto',
-    fluid: true,
-    aspectRatio: '16:9',
-    playbackRates: [0.5, 0.75, 1, 1.25, 1.5, 2],
-    controlBar: {
-      children: [
-        'playToggle',
-        'currentTimeDisplay',
-        'timeDivider',
-        'durationDisplay',
-        'progressControl',
-        'volumePanel',
-        'playbackRateMenuButton',
-        'fullscreenToggle'
-      ]
-    },
-    language: 'zh-CN',
-    languages: {
-      'zh-CN': {
-        'Play': '播放',
-        'Pause': '暂停',
-        'Current Time': '当前时间',
-        'Duration': '时长',
-        'Remaining Time': '剩余时间',
-        'Loaded': '已加载',
-        'Progress': '进度',
-        'Fullscreen': '全屏',
-        'Exit Fullscreen': '退出全屏',
-        'Mute': '静音',
-        'Unmute': '取消静音',
-        'Playback Rate': '播放速度',
-        'Subtitles': '字幕',
-        'subtitles off': '关闭字幕',
-        'Captions': '内嵌字幕',
-        'captions off': '关闭内嵌字幕',
-        'Chapters': '节目段落',
-        'You aborted the media playback': '视频播放被终止',
-        'A network error caused the media download to fail part-way.': '网络错误导致视频下载中途失败',
-        'The media could not be loaded, either because the server or network failed or because the format is not supported.': '视频因格式不支持或者服务器或网络的问题无法加载',
-        'The media playback was aborted due to a corruption problem or because the media used features your browser did not support.': '由于视频文件损坏或是该视频使用了你的浏览器不支持的功能，播放终止',
-        'No compatible source was found for this media.': '无法找到此视频兼容的源'
-      }
-    }
-  })
-
-  // 监听错误事件
-  player.on('error', () => {
-    const error = player.error()
-    console.error('Video.js error:', error)
-    ElMessage.error(`播放失败: ${error?.message || '未知错误'}`)
-  })
-}
-
 // 加载视频
 const loadVideo = async (video: Video, page?: Page) => {
-  if (!player) return
+  const el = videoPlayerRef.value
+  if (!el) return
 
   try {
     const videoUrl = buildVideoUrl(video, page)
     console.log('Loading video:', videoUrl)
 
-    player.src({
-      type: 'video/mp4',
-      src: videoUrl
-    })
-
-    player.load()
+    el.src = videoUrl
+    el.load()
     currentPage.value = page || null
 
     // 尝试自动播放
     setTimeout(() => {
-      player.play().catch((err: Error) => {
+      el.play().catch((err: Error) => {
         console.warn('Auto-play failed:', err)
       })
     }, 100)
@@ -252,8 +187,9 @@ const switchEpisode = (page: Page) => {
 
 // 关闭对话框
 const handleClose = () => {
-  if (player) {
-    player.pause()
+  const el = videoPlayerRef.value
+  if (el) {
+    el.pause()
   }
   emit('update:visible', false)
 }
@@ -261,29 +197,27 @@ const handleClose = () => {
 // 监听对话框显示状态
 watch(() => props.visible, (newVal) => {
   if (newVal && props.video) {
-    // 对话框打开时初始化播放器
+    // 对话框打开时加载视频
     setTimeout(() => {
-      initPlayer()
-
       // 判断是单P还是多P视频
-      if (props.video.single_page) {
+      if (props.video!.single_page) {
         // 单P视频：直接播放，不传 page 参数
-        if (isDownloadComplete(props.video.download_status)) {
+        if (isDownloadComplete(props.video!.download_status)) {
           pages.value = []
-          loadVideo(props.video)
+          loadVideo(props.video!)
         } else {
           ElMessage.warning('该视频尚未下载完成')
         }
       } else {
         // 多P视频：加载分P列表
-        if (props.video.pages && props.video.pages.length > 0) {
-          pages.value = props.video.pages
+        if (props.video!.pages && props.video!.pages.length > 0) {
+          pages.value = props.video!.pages
           // 如果指定了初始分集，播放指定分集；否则播放第一个已下载的分集
           const targetPage = props.initialPage && isDownloadComplete(props.initialPage.download_status)
             ? props.initialPage
             : pages.value.find(p => isDownloadComplete(p.download_status))
           if (targetPage) {
-            loadVideo(props.video, targetPage)
+            loadVideo(props.video!, targetPage)
           } else {
             ElMessage.warning('该视频的所有分集尚未下载完成')
           }
@@ -292,10 +226,13 @@ watch(() => props.visible, (newVal) => {
         }
       }
     }, 100)
-  } else if (!newVal && player) {
-    // 对话框关闭时销毁播放器
-    player.dispose()
-    player = null
+  } else if (!newVal) {
+    const el = videoPlayerRef.value
+    if (el) {
+      el.pause()
+      el.removeAttribute('src')
+      el.load()
+    }
     currentPage.value = null
     pages.value = []
   }
@@ -303,8 +240,9 @@ watch(() => props.visible, (newVal) => {
 
 // 组件卸载时清理
 onBeforeUnmount(() => {
-  if (player) {
-    player.dispose()
+  const el = videoPlayerRef.value
+  if (el) {
+    el.pause()
   }
 })
 </script>
@@ -336,10 +274,10 @@ onBeforeUnmount(() => {
   background: #000;
   border-radius: 4px;
 
-  // Video.js播放器容器
-  :deep(.video-js) {
+  .native-player {
     width: 100%;
     max-height: 70vh;
+    display: block;
   }
 }
 
@@ -443,7 +381,7 @@ onBeforeUnmount(() => {
   }
 
   .player-wrapper {
-    :deep(.video-js) {
+    .native-player {
       max-height: 60vh;
     }
   }

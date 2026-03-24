@@ -3,7 +3,11 @@ package api
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"net/http"
+	"path"
+	"strings"
+	"sync"
 	"time"
 
 	"bili-download/internal/auth"
@@ -30,10 +34,14 @@ type Server struct {
 	httpServer       *http.Server
 	websocketHub     *WebSocketHub
 	imageProxyClient *http.Client
+	frontendFS       fs.FS
+	checkVersion     CheckVersionInfo
+	checkVersionMu   sync.RWMutex
+	UpgradeSignal    chan string
 }
 
 // NewServer 创建新的 API 服务器
-func NewServer(cfg *config.Config, configPath string, db *gorm.DB, biliClient *bilibili.Client, downloadMgr *downloader.DownloadManager) (*Server, error) {
+func NewServer(cfg *config.Config, configPath string, db *gorm.DB, biliClient *bilibili.Client, downloadMgr *downloader.DownloadManager, frontendFS fs.FS) (*Server, error) {
 	// 设置 Gin 模式
 	if cfg.Logging.Level == "debug" {
 		gin.SetMode(gin.DebugMode)
@@ -42,12 +50,14 @@ func NewServer(cfg *config.Config, configPath string, db *gorm.DB, biliClient *b
 	}
 
 	s := &Server{
-		config:       cfg,
-		configPath:   configPath,
-		db:           db,
-		biliClient:   biliClient,
-		downloadMgr:  downloadMgr,
-		websocketHub: NewWebSocketHub(),
+		config:        cfg,
+		configPath:    configPath,
+		db:            db,
+		biliClient:    biliClient,
+		downloadMgr:   downloadMgr,
+		websocketHub:  NewWebSocketHub(),
+		frontendFS:    frontendFS,
+		UpgradeSignal: make(chan string, 1),
 		imageProxyClient: &http.Client{
 			Timeout: 10 * time.Second,
 			Transport: &http.Transport{
@@ -64,6 +74,9 @@ func NewServer(cfg *config.Config, configPath string, db *gorm.DB, biliClient *b
 	// 创建路由
 	s.setupRouter()
 
+	// 启动后台版本检查
+	s.startVersionChecker()
+
 	return s, nil
 }
 
@@ -75,11 +88,11 @@ func (s *Server) setupRouter() {
 	router.Use(gin.Recovery())
 	router.Use(s.loggerMiddleware())
 	router.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"*"},
+		AllowAllOrigins:  true,
 		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Accept", "Authorization"},
 		ExposeHeaders:    []string{"Content-Length"},
-		AllowCredentials: true,
+		AllowCredentials: false,
 		MaxAge:           12 * time.Hour,
 	}))
 
@@ -213,6 +226,11 @@ func (s *Server) setupRouter() {
 		// WebSocket
 		api.GET("/ws", s.handleWebSocket)
 
+		// 版本管理
+		api.GET("/version", s.handleGetVersion)
+		api.POST("/version/check", s.handleCheckVersion)
+		api.POST("/upgrade", s.handleUpgrade)
+
 		// 调度器路由
 		s.registerSchedulerRoutes(api)
 	}
@@ -224,12 +242,34 @@ func (s *Server) setupRouter() {
 		utils.Info("下载目录静态文件服务: /downloads -> %s", downloadPath)
 	}
 
-	// 静态文件服务（前端）
-	router.Static("/assets", "./web/dist/assets")
-	router.StaticFile("/", "./web/dist/index.html")
-	router.NoRoute(func(c *gin.Context) {
-		c.File("./web/dist/index.html")
-	})
+	// 静态文件服务（前端 - 从embed.FS提供）
+	if s.frontendFS != nil {
+		assetsFS, _ := fs.Sub(s.frontendFS, "assets")
+		indexHTML, _ := fs.ReadFile(s.frontendFS, "index.html")
+
+		router.StaticFS("/assets", http.FS(assetsFS))
+		router.GET("/", func(c *gin.Context) {
+			c.Data(http.StatusOK, "text/html; charset=utf-8", indexHTML)
+		})
+		router.NoRoute(func(c *gin.Context) {
+			// 尝试从embed中读取静态文件（如favicon.svg）
+			urlPath := path.Clean(c.Request.URL.Path)
+			if len(urlPath) > 1 && !strings.Contains(urlPath, "..") {
+				if data, err := fs.ReadFile(s.frontendFS, urlPath[1:]); err == nil {
+					http.ServeContent(c.Writer, c.Request, urlPath, time.Time{}, strings.NewReader(string(data)))
+					return
+				}
+			}
+			c.Data(http.StatusOK, "text/html; charset=utf-8", indexHTML)
+		})
+	} else {
+		// 开发模式回退到磁盘文件
+		router.Static("/assets", "./web/dist/assets")
+		router.StaticFile("/", "./web/dist/index.html")
+		router.NoRoute(func(c *gin.Context) {
+			c.File("./web/dist/index.html")
+		})
+	}
 
 	s.router = router
 }
@@ -410,7 +450,7 @@ func (s *Server) authMiddleware() gin.HandlerFunc {
 		path := c.Request.URL.Path
 
 		// 跳过公开接口
-		if path == "/api/health" || path == "/api/auth/login" || path == "/api/image-proxy" {
+		if path == "/api/health" || path == "/api/auth/login" || path == "/api/image-proxy" || path == "/api/version" {
 			c.Next()
 			return
 		}

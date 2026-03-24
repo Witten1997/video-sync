@@ -409,7 +409,7 @@ const handleSubscribeFavorite = async (row: FavoriteFolder) => {
   subscribeDialogTitle.value = '订阅收藏夹'
   subscribeForm.value = {
     name: row.title,
-    path: ''
+    path: '/收藏夹/' + row.title
   }
   subscribeDialogVisible.value = true
 }
@@ -439,7 +439,7 @@ const handleSubscribeUpper = async (row: FollowingUser) => {
   subscribeDialogTitle.value = '订阅UP主'
   subscribeForm.value = {
     name: row.uname,
-    path: ''
+    path: '/up主/' + row.uname
   }
   subscribeDialogVisible.value = true
 }

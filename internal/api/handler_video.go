@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"bili-download/internal/database/models"
+	"bili-download/internal/downloader"
 	"bili-download/internal/utils"
 
 	"github.com/gin-gonic/gin"
@@ -266,7 +267,21 @@ type DownloadByURLRequest struct {
 	URL string `json:"url" binding:"required"`
 }
 
-// handleDownloadByURL 通过B站视频链接下载视频
+// isBilibiliURL 判断URL是否为B站链接
+func isBilibiliURL(rawURL string) bool {
+	// 纯BVID
+	if len(rawURL) == 12 && rawURL[:2] == "BV" {
+		return true
+	}
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return false
+	}
+	host := u.Hostname()
+	return host == "www.bilibili.com" || host == "bilibili.com" || host == "b23.tv" || host == "m.bilibili.com"
+}
+
+// handleDownloadByURL 通过视频链接下载视频（支持B站和其他平台）
 func (s *Server) handleDownloadByURL(c *gin.Context) {
 	var req DownloadByURLRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -274,8 +289,20 @@ func (s *Server) handleDownloadByURL(c *gin.Context) {
 		return
 	}
 
+	if isBilibiliURL(req.URL) {
+		s.handleBilibiliDownloadByURL(c, req.URL)
+		return
+	}
+
+	// 非B站链接，使用yt-dlp下载
+	s.handleYtdlpDownloadByURL(c, req.URL)
+}
+
+// handleBilibiliDownloadByURL 通过B站视频链接下载视频
+func (s *Server) handleBilibiliDownloadByURL(c *gin.Context, rawURL string) {
+
 	// 1. 解析URL获取BVID
-	bvid, err := s.biliClient.ParseVideoURL(req.URL)
+	bvid, err := s.biliClient.ParseVideoURL(rawURL)
 	if err != nil {
 		respondValidationError(c, "无效的B站视频链接: "+err.Error())
 		return
@@ -368,6 +395,98 @@ func (s *Server) handleDownloadByURL(c *gin.Context) {
 
 	// 8. 使用统一的下载方法创建任务
 	task, err := s.downloadMgr.PrepareAndAddVideoTask(&video, s.config.Paths.DownloadBase, 0, true)
+	if err != nil {
+		respondInternalError(c, err)
+		return
+	}
+
+	respondSuccess(c, gin.H{
+		"task_id": task.ID,
+		"video":   video,
+		"message": "视频信息已获取，下载任务已创建",
+	})
+}
+
+// handleYtdlpDownloadByURL 通过yt-dlp下载非B站视频
+func (s *Server) handleYtdlpDownloadByURL(c *gin.Context, rawURL string) {
+	// 使用yt-dlp获取视频信息
+	ctx := c.Request.Context()
+	ytdlpDl := downloader.NewYtdlpDownloader(s.config, nil)
+	info, err := ytdlpDl.GetVideoInfo(ctx, rawURL, "")
+	if err != nil {
+		respondError(c, 500, "获取视频信息失败: "+err.Error())
+		return
+	}
+
+	// 提取视频信息
+	title, _ := info["title"].(string)
+	if title == "" {
+		title = "未知视频"
+	}
+	description, _ := info["description"].(string)
+	thumbnail, _ := info["thumbnail"].(string)
+	uploader, _ := info["uploader"].(string)
+	videoID, _ := info["id"].(string)
+	if videoID == "" {
+		videoID = fmt.Sprintf("ytdlp_%d", time.Now().UnixNano())
+	}
+
+	// 用平台前缀+ID作为bvid（确保唯一）
+	extractor, _ := info["extractor_key"].(string)
+	bvid := fmt.Sprintf("%s_%s", extractor, videoID)
+	if len(bvid) > 20 {
+		bvid = bvid[:20]
+	}
+
+	// 检查是否已存在
+	var existingVideo models.Video
+	if s.db.Where("bvid = ?", bvid).First(&existingVideo).Error == nil {
+		task, err := s.downloadMgr.PrepareAndAddYtdlpTask(&existingVideo, rawURL, s.config.Paths.DownloadBase)
+		if err != nil {
+			respondInternalError(c, err)
+			return
+		}
+		respondSuccess(c, gin.H{
+			"task_id": task.ID,
+			"video":   existingVideo,
+			"message": "视频已存在，下载任务已创建",
+		})
+		return
+	}
+
+	// 提取发布时间
+	pubTime := time.Now()
+	if ts, ok := info["timestamp"].(float64); ok && ts > 0 {
+		pubTime = time.Unix(int64(ts), 0)
+	} else if uploadDate, ok := info["upload_date"].(string); ok && len(uploadDate) == 8 {
+		if t, err := time.Parse("20060102", uploadDate); err == nil {
+			pubTime = t
+		}
+	}
+
+	// 创建视频记录
+	now := time.Now()
+	video := models.Video{
+		BVid:           bvid,
+		Name:           title,
+		Intro:          description,
+		Cover:          thumbnail,
+		UpperName:      uploader,
+		PubTime:        pubTime,
+		FavTime:        now,
+		CTime:          pubTime,
+		SinglePage:     true,
+		Valid:          true,
+		ShouldDownload: true,
+	}
+
+	if err := s.db.Create(&video).Error; err != nil {
+		respondInternalError(c, err)
+		return
+	}
+
+	// 创建yt-dlp下载任务
+	task, err := s.downloadMgr.PrepareAndAddYtdlpTask(&video, rawURL, s.config.Paths.DownloadBase)
 	if err != nil {
 		respondInternalError(c, err)
 		return

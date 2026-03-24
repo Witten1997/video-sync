@@ -9,6 +9,13 @@ export default defineConfig({
       '@': resolve(__dirname, 'src')
     }
   },
+  css: {
+    preprocessorOptions: {
+      scss: {
+        api: 'modern-compiler'
+      }
+    }
+  },
   server: {
     port: 3000,
     proxy: {
@@ -27,6 +34,9 @@ export default defineConfig({
     outDir: 'dist',
     assetsDir: 'assets',
     sourcemap: false,
+    modulePreload: {
+      polyfill: false
+    },
     rollupOptions: {
       output: {
         manualChunks: {
@@ -34,5 +44,8 @@ export default defineConfig({
         }
       }
     }
+  },
+  html: {
+    cspNonce: undefined
   }
 })

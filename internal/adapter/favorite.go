@@ -87,6 +87,14 @@ func (a *FavoriteAdapter) Scan(ctx context.Context, opts *ScanOptions) ([]VideoI
 
 		// 转换为统一的VideoInfo格式
 		for _, media := range resp.Medias {
+			// 按收藏时间排序时，遇到早于上次扫描时间的视频直接终止翻页
+			if opts.OnlyNew && !opts.LastScanTime.IsZero() && (params.Order == "mtime" || params.Order == "") {
+				favTime := time.Unix(media.FavTime, 0)
+				if !favTime.After(opts.LastScanTime) {
+					return allVideos, nil
+				}
+			}
+
 			// 应用过滤条件
 			if !a.matchFilter(media, opts) {
 				continue

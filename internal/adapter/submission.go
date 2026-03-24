@@ -91,6 +91,14 @@ func (a *SubmissionAdapter) Scan(ctx context.Context, opts *ScanOptions) ([]Vide
 
 		// 转换为统一的VideoInfo格式
 		for _, video := range resp.List.Vlist {
+			// 按pubdate排序时，遇到早于上次扫描时间的视频直接终止翻页
+			if opts.OnlyNew && !opts.LastScanTime.IsZero() && (params.Order == "pubdate" || params.Order == "") {
+				pubTime := time.Unix(video.Created, 0)
+				if !pubTime.After(opts.LastScanTime) {
+					return allVideos, nil
+				}
+			}
+
 			// 应用过滤条件
 			if !a.matchFilter(video, opts) {
 				continue

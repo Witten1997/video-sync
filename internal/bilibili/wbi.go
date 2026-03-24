@@ -125,20 +125,40 @@ func SignWBI(params url.Values, mixinKey string) url.Values {
 
 // GetWbiSignedParams 获取带 WBI 签名的参数
 func (c *Client) GetWbiSignedParams(params url.Values) (url.Values, error) {
-	// 获取 WBI 图片信息
-	wbiImg, err := c.GetWbiImg()
+	mixinKey, err := c.getCachedMixinKey()
 	if err != nil {
 		return nil, err
 	}
 
-	// 生成混淆密钥
-	mixinKey := wbiImg.GetMixinKey()
-	if mixinKey == "" {
-		return nil, fmt.Errorf("生成混淆密钥失败")
+	return SignWBI(params, mixinKey), nil
+}
+
+// getCachedMixinKey 获取缓存的WBI混淆密钥，30分钟刷新一次
+func (c *Client) getCachedMixinKey() (string, error) {
+	if c.wbiMixinKey != "" && time.Since(c.wbiCachedAt) < 30*time.Minute {
+		return c.wbiMixinKey, nil
 	}
 
-	// 签名参数
-	return SignWBI(params, mixinKey), nil
+	wbiImg, err := c.GetWbiImg()
+	if err != nil {
+		// 缓存未过期时降级使用旧key
+		if c.wbiMixinKey != "" {
+			return c.wbiMixinKey, nil
+		}
+		return "", err
+	}
+
+	mixinKey := wbiImg.GetMixinKey()
+	if mixinKey == "" {
+		if c.wbiMixinKey != "" {
+			return c.wbiMixinKey, nil
+		}
+		return "", fmt.Errorf("生成混淆密钥失败")
+	}
+
+	c.wbiMixinKey = mixinKey
+	c.wbiCachedAt = time.Now()
+	return mixinKey, nil
 }
 
 // GetJSONWithWBI 使用 WBI 签名发送 GET 请求并解析 JSON 响应

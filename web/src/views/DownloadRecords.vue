@@ -1,9 +1,62 @@
 <template>
   <div class="download-records" style="padding: 32px;">
-    <div style="margin-bottom: 24px;">
-      <h2 style="margin: 0 0 8px; font-size: 1.25rem; font-weight: 700; color: #1e293b;">下载管理</h2>
-      <p style="margin: 0; font-size: 0.875rem; color: #64748b;">查看和管理所有下载记录</p>
+    <div style="margin-bottom: 24px; display: flex; justify-content: space-between; align-items: flex-start;">
+      <div>
+        <h2 style="margin: 0 0 8px; font-size: 1.25rem; font-weight: 700; color: #1e293b;">下载管理</h2>
+        <p style="margin: 0; font-size: 0.875rem; color: #64748b;">查看和管理所有下载记录</p>
+      </div>
+      <el-button type="primary" @click="showDownloadDialog">
+        <el-icon><Link /></el-icon>
+        通过URL下载
+      </el-button>
     </div>
+
+    <!-- URL下载对话框 -->
+    <el-dialog
+      v-model="downloadDialogVisible"
+      title="通过URL下载视频"
+      width="600px"
+      :close-on-click-modal="false"
+    >
+      <el-form :model="downloadForm" label-width="100px">
+        <el-form-item label="视频链接">
+          <el-input
+            v-model="downloadForm.url"
+            type="textarea"
+            :rows="3"
+            placeholder="请输入视频链接，支持B站、YouTube等平台"
+          />
+        </el-form-item>
+        <el-form-item>
+          <el-alert
+            title="支持的链接格式"
+            type="info"
+            :closable="false"
+            show-icon
+          >
+            <template #default>
+              <ul style="margin: 0; padding-left: 20px;">
+                <li>B站: https://www.bilibili.com/video/BV1xx411c7XD</li>
+                <li>B站短链: https://b23.tv/BV1xx411c7XD</li>
+                <li>YouTube: https://www.youtube.com/watch?v=xxxxx</li>
+                <li>其他yt-dlp支持的平台链接</li>
+              </ul>
+            </template>
+          </el-alert>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="downloadDialogVisible = false">取消</el-button>
+        <el-button
+          type="primary"
+          :loading="downloadLoading"
+          :disabled="!downloadForm.url"
+          @click="handleDownloadByURL"
+        >
+          开始下载
+        </el-button>
+      </template>
+    </el-dialog>
 
     <!-- 筛选栏 -->
     <el-card style="margin-bottom: 16px;">
@@ -21,6 +74,7 @@
           <el-option label="合集" value="collection" />
           <el-option label="UP主投稿" value="submission" />
           <el-option label="稍后再看" value="watch_later" />
+          <el-option label="URL下载" value="url" />
         </el-select>
         <el-input
           v-model="filters.keyword"
@@ -123,7 +177,9 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
+import { Link } from '@element-plus/icons-vue'
 import { getDownloadRecords, getDownloadRecord, retryDownloadRecord, deleteDownloadRecord, batchDeleteDownloadRecords, batchRetryDownloadRecords } from '@/api/download-records'
+import { downloadVideoByURL } from '@/api/video'
 import SegmentedProgress from '@/components/SegmentedProgress.vue'
 import type { DownloadRecord } from '@/types'
 import { useAuthStore } from '@/stores/auth'
@@ -135,6 +191,38 @@ const selectedIds = ref<number[]>([])
 const selectedRows = ref<DownloadRecord[]>([])
 const filters = reactive({ status: '', source_type: '', keyword: '' })
 const pagination = reactive({ page: 1, pageSize: 20, total: 0 })
+
+// URL下载对话框
+const downloadDialogVisible = ref(false)
+const downloadLoading = ref(false)
+const downloadForm = ref({ url: '' })
+
+const showDownloadDialog = () => {
+  downloadForm.value.url = ''
+  downloadDialogVisible.value = true
+}
+
+const handleDownloadByURL = async () => {
+  const url = downloadForm.value.url.trim()
+  if (!url) {
+    ElMessage.warning('请输入视频链接')
+    return
+  }
+  downloadLoading.value = true
+  try {
+    const result = await downloadVideoByURL(url)
+    ElMessage.success(result.message || '下载任务已创建')
+    downloadDialogVisible.value = false
+    downloadForm.value.url = ''
+    setTimeout(() => loadRecords(), 1000)
+  } catch (error: any) {
+    const errorMsg = error?.response?.data?.message || error?.message || '下载失败'
+    ElMessage.error(errorMsg)
+  } finally {
+    downloadLoading.value = false
+  }
+}
+
 let ws: WebSocket | null = null
 let pollTimer: ReturnType<typeof setInterval> | null = null
 

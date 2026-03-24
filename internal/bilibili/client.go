@@ -19,8 +19,13 @@ const (
 
 // Client B站 HTTP 客户端
 type Client struct {
-	httpClient *http.Client
-	credential *Credential
+	httpClient  *http.Client
+	credential  *Credential
+	wbiMixinKey string
+	wbiCachedAt time.Time
+	// 用户信息缓存
+	cachedUserInfo *UserInfo
+	userCachedAt   time.Time
 }
 
 // NewClient 创建新的 B站 客户端

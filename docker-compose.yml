@@ -42,15 +42,15 @@ services:
       - POSTGRES_DB=video_sync
       - APP_PORT=8080
     ports:
-      - "21001:80"
+      - "21001:8080"
     volumes:
       - ./downloads:/downloads
       - ./metadata:/metadata
-      - ./logs:/var/log/bili-sync
+      - ./logs:/var/log/video-sync
       - ./configs:/app/configs
 
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost/api/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/health"]
       interval: 30s
       timeout: 10s
       retries: 3

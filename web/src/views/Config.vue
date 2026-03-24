@@ -391,6 +391,66 @@
             </el-form-item>
           </el-form>
         </el-tab-pane>
+
+        <el-tab-pane label="版本信息" name="version">
+          <el-form label-width="180px">
+            <el-divider content-position="left">程序版本</el-divider>
+
+            <el-form-item label="当前版本">
+              <el-tag type="info" size="large">
+                {{ appVersion.current_version || '加载中...' }}
+              </el-tag>
+            </el-form-item>
+
+            <el-form-item label="构建时间" v-if="appVersion.build_time">
+              <el-text type="info">{{ appVersion.build_time }}</el-text>
+            </el-form-item>
+
+            <el-form-item label="最新版本">
+              <div class="version-info">
+                <el-tag v-if="appVersion.new_version" :type="appVersion.has_update ? 'success' : 'info'" size="large">
+                  {{ appVersion.new_version }}
+                </el-tag>
+                <el-text v-else type="info">未检查</el-text>
+                <el-tag v-if="appVersion.has_update" type="warning" size="small" style="margin-left: 10px">
+                  有新版本可用
+                </el-tag>
+              </div>
+            </el-form-item>
+
+            <el-form-item label="检查时间" v-if="appVersion.checked_at">
+              <el-text type="info">{{ appVersion.checked_at }}</el-text>
+            </el-form-item>
+
+            <el-form-item label="更新日志" v-if="appVersion.changelog">
+              <el-input
+                type="textarea"
+                :model-value="appVersion.changelog"
+                :rows="8"
+                readonly
+                style="width: 100%;"
+              />
+            </el-form-item>
+
+            <el-form-item label="操作">
+              <el-space>
+                <el-button @click="handleCheckAppVersion" :loading="appVersionLoading">
+                  <el-icon><Refresh /></el-icon>
+                  检查更新
+                </el-button>
+                <el-button
+                  type="primary"
+                  @click="handleAppUpgrade"
+                  :loading="appUpgrading"
+                  :disabled="!appVersion.has_update"
+                >
+                  <el-icon><Upload /></el-icon>
+                  {{ appVersion.has_update ? '立即更新' : '已是最新版本' }}
+                </el-button>
+              </el-space>
+            </el-form-item>
+          </el-form>
+        </el-tab-pane>
       </el-tabs>
 
       <div class="actions">
@@ -407,6 +467,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Refresh, Upload, Clock, SuccessFilled, CircleCheckFilled, CircleCloseFilled } from '@element-plus/icons-vue'
 import { getConfig, updateConfig, validateBilibiliCredential, generateQRCode, pollQRCodeStatus } from '@/api/config'
 import { getYtdlpVersionInfo, updateYtdlpVersion } from '@/api/ytdlp'
+import { getVersionInfo, checkVersion, doUpgrade } from '@/api/version'
 import QRCode from 'qrcode'
 
 defineOptions({
@@ -444,6 +505,19 @@ const ytdlpVersion = ref({
 const ytdlpLoading = ref(false)
 const ytdlpUpdating = ref(false)
 const ytdlpForceUpdate = ref(false)
+
+// 程序版本管理
+const appVersion = ref({
+  current_version: '',
+  build_time: '',
+  has_update: false,
+  new_version: '',
+  changelog: '',
+  checked_at: '',
+  download_url: ''
+})
+const appVersionLoading = ref(false)
+const appUpgrading = ref(false)
 
 // 认证验证状态
 const credentialValidation = ref<{
@@ -749,6 +823,60 @@ const updateYtdlp = async () => {
   }
 }
 
+// ==================== 程序版本管理 ====================
+
+const loadAppVersion = async () => {
+  try {
+    const data = await getVersionInfo()
+    appVersion.value = data
+  } catch (error) {
+    console.error('获取版本信息失败:', error)
+  }
+}
+
+const handleCheckAppVersion = async () => {
+  appVersionLoading.value = true
+  try {
+    const data = await checkVersion()
+    appVersion.value = data
+    if (data.has_update) {
+      ElMessage.success(`发现新版本 ${data.new_version}`)
+    } else {
+      ElMessage.info('已是最新版本')
+    }
+  } catch (error: any) {
+    ElMessage.error(error?.response?.data?.message || '检查版本失败')
+  } finally {
+    appVersionLoading.value = false
+  }
+}
+
+const handleAppUpgrade = async () => {
+  try {
+    await ElMessageBox.confirm(
+      `确定要升级到 ${appVersion.value.new_version} 吗？升级完成后服务将自动重启。`,
+      '确认升级',
+      { confirmButtonText: '确定', cancelButtonText: '取消', type: 'warning' }
+    )
+
+    appUpgrading.value = true
+    await doUpgrade(appVersion.value.new_version)
+
+    ElMessage.success('升级成功，服务正在重启，请稍后刷新页面...')
+
+    // 10秒后自动刷新
+    setTimeout(() => {
+      window.location.reload()
+    }, 10000)
+  } catch (error: any) {
+    if (error !== 'cancel') {
+      ElMessage.error(error?.response?.data?.message || '升级失败')
+    }
+  } finally {
+    appUpgrading.value = false
+  }
+}
+
 // ==================== 二维码登录处理函数 ====================
 
 // 生成二维码
@@ -876,6 +1004,7 @@ const handleCancelQRCode = () => {
 onMounted(() => {
   loadData()
   checkYtdlpVersion()
+  loadAppVersion()
 })
 
 // 组件卸载时清理定时器

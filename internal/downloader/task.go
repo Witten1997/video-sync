@@ -16,6 +16,7 @@ const (
 	TaskTypeVideo      TaskType = "video"      // 视频任务（单个视频的所有分P）
 	TaskTypePage       TaskType = "page"       // 分P任务（单个分P）
 	TaskTypeCollection TaskType = "collection" // 合集任务（批量视频）
+	TaskTypeYtdlp      TaskType = "ytdlp"      // yt-dlp任务（通用URL下载）
 )
 
 // TaskStatus 任务状态
@@ -43,24 +44,25 @@ const (
 
 // DownloadTask 下载任务
 type DownloadTask struct {
-	ID          string             `json:"id"`           // 任务ID
-	Type        TaskType           `json:"type"`         // 任务类型
-	Status      TaskStatus         `json:"status"`       // 任务状态
-	Priority    TaskPriority       `json:"priority"`     // 优先级
-	Video       *models.Video      `json:"video"`        // 视频信息
-	Page        *models.Page       `json:"page"`         // 分P信息（仅分P任务）
+	ID          string             `json:"id"`                  // 任务ID
+	Type        TaskType           `json:"type"`                // 任务类型
+	Status      TaskStatus         `json:"status"`              // 任务状态
+	Priority    TaskPriority       `json:"priority"`            // 优先级
+	Video       *models.Video      `json:"video"`               // 视频信息
+	Page        *models.Page       `json:"page"`                // 分P信息（仅分P任务）
 	RecordID    uint               `json:"record_id,omitempty"` // 关联的下载记录ID
-	OutputDir   string             `json:"output_dir"`   // 输出目录
-	RetryCount  int                `json:"retry_count"`  // 重试次数
-	MaxRetries  int                `json:"max_retries"`  // 最大重试次数
-	Error       error              `json:"-"`            // 错误信息
-	ErrorMsg    string             `json:"error_msg"`    // 错误消息（JSON序列化）
-	CreatedAt   time.Time          `json:"created_at"`   // 创建时间
-	StartedAt   time.Time          `json:"started_at"`   // 开始时间
-	CompletedAt time.Time          `json:"completed_at"` // 完成时间
-	CancelFunc  context.CancelFunc `json:"-"`            // 取消函数
-	Context     context.Context    `json:"-"`            // 任务上下文
-	mu          sync.RWMutex       `json:"-"`            // 读写锁
+	URL         string             `json:"url,omitempty"`       // 下载URL（yt-dlp任务使用）
+	OutputDir   string             `json:"output_dir"`          // 输出目录
+	RetryCount  int                `json:"retry_count"`         // 重试次数
+	MaxRetries  int                `json:"max_retries"`         // 最大重试次数
+	Error       error              `json:"-"`                   // 错误信息
+	ErrorMsg    string             `json:"error_msg"`           // 错误消息（JSON序列化）
+	CreatedAt   time.Time          `json:"created_at"`          // 创建时间
+	StartedAt   time.Time          `json:"started_at"`          // 开始时间
+	CompletedAt time.Time          `json:"completed_at"`        // 完成时间
+	CancelFunc  context.CancelFunc `json:"-"`                   // 取消函数
+	Context     context.Context    `json:"-"`                   // 任务上下文
+	mu          sync.RWMutex       `json:"-"`                   // 读写锁
 }
 
 // NewDownloadTask 创建新的下载任务
@@ -93,6 +95,8 @@ func generateTaskID(taskType TaskType, video *models.Video, page *models.Page) s
 		return fmt.Sprintf("video-%d", video.ID)
 	case TaskTypeCollection:
 		return fmt.Sprintf("collection-%d-%d", video.ID, time.Now().Unix())
+	case TaskTypeYtdlp:
+		return fmt.Sprintf("ytdlp-%d-%d", video.ID, time.Now().Unix())
 	default:
 		return fmt.Sprintf("task-%d", time.Now().UnixNano())
 	}

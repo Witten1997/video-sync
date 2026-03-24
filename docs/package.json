@@ -1,6 +1,6 @@
 {
   "name": "video-sync-docs",
-  "version": "1.0.0",
+  "version": "0.0.1",
   "scripts": {
     "docs:dev": "vitepress dev",
     "docs:build": "vitepress build",

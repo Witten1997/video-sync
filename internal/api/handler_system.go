@@ -2,6 +2,7 @@ package api
 
 import (
 	"bili-download/internal/database/models"
+	"bili-download/internal/version"
 	"runtime"
 	"time"
 
@@ -35,7 +36,7 @@ func (s *Server) handleSystemInfo(c *gin.Context) {
 	uptime := time.Since(startTime)
 
 	respondSuccess(c, SystemInfo{
-		Version:   "1.0.0", // TODO: 从构建信息获取
+		Version:   version.Version,
 		GoVersion: runtime.Version(),
 		OS:        runtime.GOOS,
 		Arch:      runtime.GOARCH,

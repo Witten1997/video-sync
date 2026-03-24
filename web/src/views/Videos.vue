@@ -79,58 +79,8 @@
           <el-icon><Refresh /></el-icon>
           刷新
         </el-button>
-        <el-button type="primary" @click="showDownloadDialog">
-          <el-icon><Link /></el-icon>
-          通过URL下载
-        </el-button>
       </div>
     </div>
-
-    <!-- URL下载对话框 -->
-    <el-dialog
-      v-model="downloadDialogVisible"
-      title="通过URL下载视频"
-      width="600px"
-      :close-on-click-modal="false"
-    >
-      <el-form :model="downloadForm" label-width="100px">
-        <el-form-item label="视频链接">
-          <el-input
-            v-model="downloadForm.url"
-            type="textarea"
-            :rows="3"
-            placeholder="请输入B站视频链接，支持以下格式：&#10;https://www.bilibili.com/video/BVxxxxxxxxxx&#10;https://b23.tv/xxxxxxxx&#10;BVxxxxxxxxxx"
-          />
-        </el-form-item>
-        <el-form-item>
-          <el-alert
-            title="支持的链接格式"
-            type="info"
-            :closable="false"
-            show-icon
-          >
-            <template #default>
-              <ul style="margin: 0; padding-left: 20px;">
-                <li>标准链接: https://www.bilibili.com/video/BV1xx411c7XD</li>
-                <li>短链接: https://b23.tv/BV1xx411c7XD</li>
-                <li>直接BV号: BV1xx411c7XD</li>
-              </ul>
-            </template>
-          </el-alert>
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="downloadDialogVisible = false">取消</el-button>
-        <el-button
-          type="primary"
-          :loading="downloadLoading"
-          :disabled="!downloadForm.url"
-          @click="handleDownloadByURL"
-        >
-          开始下载
-        </el-button>
-      </template>
-    </el-dialog>
 
     <!-- 视频源视图 -->
     <template v-if="viewMode === 'source'">
@@ -360,8 +310,8 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Search, Link, List, Grid, VideoPlay, View, Download, Delete, Refresh, Picture, Sort, FolderOpened, ArrowLeft, Star, Clock, Collection, User } from '@element-plus/icons-vue'
-import { getVideos, deleteVideo, redownloadVideo, downloadVideoByURL, getVideoPages } from '@/api/video'
+import { Search, List, Grid, VideoPlay, View, Download, Delete, Refresh, Picture, Sort, FolderOpened, ArrowLeft, Star, Clock, Collection, User } from '@element-plus/icons-vue'
+import { getVideos, deleteVideo, redownloadVideo, getVideoPages } from '@/api/video'
 import { getVideoSources } from '@/api/video-source'
 import { getProxiedImageUrl } from '@/utils/image'
 import type { Video, VideoSource } from '@/types'
@@ -402,50 +352,9 @@ const showGridView = computed(() => {
   if (viewMode.value === 'source' && selectedSource.value && sourceSubView.value === 'grid') return true
   return false
 })
-// URL下载对话框
-const downloadDialogVisible = ref(false)
-const downloadLoading = ref(false)
-const downloadForm = ref({
-  url: ''
-})
-
 // 播放器相关
 const playerVisible = ref(false)
 const currentPlayingVideo = ref<Video | null>(null)
-
-// 显示下载对话框
-const showDownloadDialog = () => {
-  downloadForm.value.url = ''
-  downloadDialogVisible.value = true
-}
-
-// 通过URL下载视频
-const handleDownloadByURL = async () => {
-  const url = downloadForm.value.url.trim()
-  if (!url) {
-    ElMessage.warning('请输入视频链接')
-    return
-  }
-
-  downloadLoading.value = true
-  try {
-    const result = await downloadVideoByURL(url)
-    ElMessage.success(result.message || '下载任务已创建')
-    downloadDialogVisible.value = false
-    downloadForm.value.url = ''
-
-    // 刷新列表以显示新添加的视频
-    setTimeout(() => {
-      loadData()
-    }, 1000)
-  } catch (error: any) {
-    const errorMsg = error?.response?.data?.message || error?.message || '下载失败'
-    ElMessage.error(errorMsg)
-    console.error('通过URL下载失败:', error)
-  } finally {
-    downloadLoading.value = false
-  }
-}
 
 // 加载视频列表
 const loadData = async () => {
