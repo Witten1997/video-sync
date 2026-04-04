@@ -66,6 +66,10 @@ func createDefaultConfig(v *viper.Viper) (*Config, error) {
 			MaxIdleConns:    5,
 			ConnMaxLifetime: 300,
 		},
+		Proxy: ProxyConfig{
+			Enabled: false,
+			URL:     "",
+		},
 		Sync: SyncConfig{
 			Interval: 3600,
 			ScanOnly: false,
@@ -144,6 +148,7 @@ func createDefaultConfig(v *viper.Viper) (*Config, error) {
 	// 将配置写入 viper
 	v.Set("server", cfg.Server)
 	v.Set("database", cfg.Database)
+	v.Set("proxy", cfg.Proxy)
 	v.Set("sync", cfg.Sync)
 	v.Set("paths", cfg.Paths)
 	v.Set("template", cfg.Template)
@@ -188,6 +193,14 @@ func loadEnvOverrides(cfg *Config) {
 	if sslmode := os.Getenv("DB_SSLMODE"); sslmode != "" {
 		cfg.Database.SSLMode = sslmode
 	}
+	if proxyURL := os.Getenv("PROXY_URL"); proxyURL != "" {
+		cfg.Proxy.Enabled = true
+		cfg.Proxy.URL = proxyURL
+	}
+	if proxyURL := os.Getenv("HTTP_PROXY_URL"); proxyURL != "" {
+		cfg.Proxy.Enabled = true
+		cfg.Proxy.URL = proxyURL
+	}
 }
 
 // Get 获取全局配置
@@ -212,6 +225,7 @@ func Save(cfg *Config, configPath string) error {
 	// 将配置写入 viper
 	v.Set("server", cfg.Server)
 	v.Set("database", cfg.Database)
+	v.Set("proxy", cfg.Proxy)
 	v.Set("sync", cfg.Sync)
 	v.Set("paths", cfg.Paths)
 	v.Set("template", cfg.Template)

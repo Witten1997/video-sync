@@ -18,6 +18,10 @@ database:
   conn_max_lifetime: 300          # 连接最大生命周期（秒）
 
 # 同步设置
+proxy:
+  enabled: false
+  url: ""                         # 例如: "http://127.0.0.1:7890"
+
 sync:
   interval: 3600                  # 同步间隔（秒）
   scan_only: false                # 仅扫描不下载

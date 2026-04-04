@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"bili-download/internal/config"
+	"bili-download/internal/utils"
 )
 
 const (
@@ -31,14 +32,7 @@ type Client struct {
 // NewClient 创建新的 B站 客户端
 func NewClient(cfg *config.Config) *Client {
 	return &Client{
-		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
-			Transport: &http.Transport{
-				MaxIdleConns:        100,
-				MaxIdleConnsPerHost: 10,
-				IdleConnTimeout:     90 * time.Second,
-			},
-		},
+		httpClient: utils.NewHTTPClient(cfg.Proxy, 30*time.Second, 100, 10),
 		credential: &Credential{
 			SESSDATA:    cfg.Bilibili.Credential.SESSDATA,
 			BiliJct:     cfg.Bilibili.Credential.BiliJct,
@@ -143,6 +137,12 @@ func (c *Client) UpdateCredential(credentialCfg *config.CredentialConfig) {
 		DedeUserID:  credentialCfg.DedeUserID,
 		AcTimeValue: credentialCfg.AcTimeValue,
 	}
+}
+
+// UpdateConfig 更新客户端配置
+func (c *Client) UpdateConfig(cfg *config.Config) {
+	c.httpClient = utils.NewHTTPClient(cfg.Proxy, 30*time.Second, 100, 10)
+	c.UpdateCredential(&cfg.Bilibili.Credential)
 }
 
 // ValidateCredential 验证认证信息是否有效

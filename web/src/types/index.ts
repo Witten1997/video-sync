@@ -89,6 +89,10 @@ export interface Config {
     max_idle_conns: number
     conn_max_lifetime: number
   }
+  proxy: {
+    enabled: boolean
+    url: string
+  }
   sync: {
     interval: number
     scan_only: boolean

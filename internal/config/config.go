@@ -8,6 +8,7 @@ import (
 type Config struct {
 	Server   ServerConfig   `yaml:"server" mapstructure:"server" json:"server"`
 	Database DatabaseConfig `yaml:"database" mapstructure:"database" json:"database"`
+	Proxy    ProxyConfig    `yaml:"proxy" mapstructure:"proxy" json:"proxy"`
 	Sync     SyncConfig     `yaml:"sync" mapstructure:"sync" json:"sync"`
 	Paths    PathsConfig    `yaml:"paths" mapstructure:"paths" json:"paths"`
 	Template TemplateConfig `yaml:"template" mapstructure:"template" json:"template"`

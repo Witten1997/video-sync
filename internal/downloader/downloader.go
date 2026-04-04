@@ -641,6 +641,9 @@ func (d *Downloader) SetProgressCallback(callback ProgressCallback) {
 // UpdateConfig 更新配置
 func (d *Downloader) UpdateConfig(cfg *config.Config) {
 	d.config = cfg
+	if d.ytdlp != nil {
+		d.ytdlp.UpdateConfig(cfg)
+	}
 	utils.Info("下载器配置已更新")
 }
 

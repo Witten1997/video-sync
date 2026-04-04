@@ -74,6 +74,7 @@ func (s *Server) handleUpdateConfig(c *gin.Context) {
 	s.config = &newConfig
 
 	// 同步更新 downloadMgr 中的配置引用
+	s.refreshHTTPClients()
 	if s.downloadMgr != nil {
 		s.downloadMgr.UpdateConfig(&newConfig)
 	}
@@ -84,8 +85,8 @@ func (s *Server) handleUpdateConfig(c *gin.Context) {
 	}
 
 	// 如果 B站认证信息发生变化，更新 biliClient 的 credential
-	if credentialChanged {
-		s.biliClient.UpdateCredential(&newConfig.Bilibili.Credential)
+	if credentialChanged || !credentialChanged {
+		s.biliClient.UpdateConfig(&newConfig)
 	}
 
 	// 通过 WebSocket 推送配置更新事件
@@ -141,6 +142,19 @@ func mergeConfigFromMap(cfg *config.Config, configMap map[string]interface{}) {
 	}
 
 	// 处理 paths 配置
+	if proxyMap, ok := configMap["proxy"].(map[string]interface{}); ok {
+		if enabled, exists := proxyMap["enabled"]; exists {
+			if v, ok := enabled.(bool); ok {
+				cfg.Proxy.Enabled = v
+			}
+		}
+		if proxyURL, exists := proxyMap["url"]; exists {
+			if v, ok := proxyURL.(string); ok {
+				cfg.Proxy.URL = v
+			}
+		}
+	}
+
 	if pathsMap, ok := configMap["paths"].(map[string]interface{}); ok {
 		if downloadBase, exists := pathsMap["download_base"]; exists {
 			if v, ok := downloadBase.(string); ok {

@@ -50,22 +50,15 @@ func NewServer(cfg *config.Config, configPath string, db *gorm.DB, biliClient *b
 	}
 
 	s := &Server{
-		config:        cfg,
-		configPath:    configPath,
-		db:            db,
-		biliClient:    biliClient,
-		downloadMgr:   downloadMgr,
-		websocketHub:  NewWebSocketHub(),
-		frontendFS:    frontendFS,
-		UpgradeSignal: make(chan string, 1),
-		imageProxyClient: &http.Client{
-			Timeout: 10 * time.Second,
-			Transport: &http.Transport{
-				MaxIdleConns:        20,
-				MaxIdleConnsPerHost: 10,
-				IdleConnTimeout:     90 * time.Second,
-			},
-		},
+		config:           cfg,
+		configPath:       configPath,
+		db:               db,
+		biliClient:       biliClient,
+		downloadMgr:      downloadMgr,
+		websocketHub:     NewWebSocketHub(),
+		frontendFS:       frontendFS,
+		UpgradeSignal:    make(chan string, 1),
+		imageProxyClient: utils.NewHTTPClient(cfg.Proxy, 10*time.Second, 20, 10),
 	}
 
 	// 创建调度器
@@ -78,6 +71,10 @@ func NewServer(cfg *config.Config, configPath string, db *gorm.DB, biliClient *b
 	s.startVersionChecker()
 
 	return s, nil
+}
+
+func (s *Server) refreshHTTPClients() {
+	s.imageProxyClient = utils.NewHTTPClient(s.config.Proxy, 10*time.Second, 20, 10)
 }
 
 // setupRouter 设置路由

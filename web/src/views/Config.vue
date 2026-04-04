@@ -7,6 +7,15 @@
             <el-form-item label="同步间隔（秒）">
               <el-input-number v-model="config.sync.interval" :min="60" />
             </el-form-item>
+            <el-form-item label="启用网络代理">
+              <el-switch v-model="config.proxy.enabled" />
+            </el-form-item>
+            <el-form-item label="HTTP 代理地址">
+              <el-input v-model="config.proxy.url" placeholder="例如: http://127.0.0.1:7890" />
+              <span class="help-text">
+                启用后，B站接口请求、二维码登录、图片代理、版本检查、升级下载和 yt-dlp 下载都会走该代理
+              </span>
+            </el-form-item>
             <el-form-item label="下载基础路径">
               <el-input v-model="config.paths.download_base" />
             </el-form-item>
@@ -583,6 +592,10 @@ const config = ref<Config>({
     max_idle_conns: 5,
     conn_max_lifetime: 300
   },
+  proxy: {
+    enabled: false,
+    url: ''
+  },
   sync: {
     interval: 3600,
     scan_only: false
@@ -707,6 +720,7 @@ const loadData = async () => {
 const getCurrentTabConfig = () => {
   const tabConfigMap: Record<string, any> = {
     basic: {
+      proxy: config.value.proxy,
       sync: config.value.sync,
       paths: config.value.paths,
       template: config.value.template

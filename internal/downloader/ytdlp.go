@@ -60,6 +60,10 @@ func (d *YtdlpDownloader) buildCommand(ctx context.Context, opts *DownloadOption
 		args = append(args, "-o", filepath.Join(opts.OutputPath, opts.OutputTemplate))
 	}
 
+	if d.config != nil && d.config.Proxy.IsEnabled() {
+		args = append(args, "--proxy", strings.TrimSpace(d.config.Proxy.URL))
+	}
+
 	// Cookies
 	if opts.Cookies != "" {
 		args = append(args, "--cookies", opts.Cookies)
@@ -100,6 +104,9 @@ func (d *YtdlpDownloader) buildCommand(ctx context.Context, opts *DownloadOption
 	args = append(args, opts.URL)
 
 	cmd := exec.CommandContext(ctx, "yt-dlp", args...)
+	if d.config != nil {
+		utils.ApplyProxyEnv(cmd, d.config.Proxy)
+	}
 	return cmd
 }
 
@@ -201,6 +208,11 @@ func (d *YtdlpDownloader) DownloadVideo(ctx context.Context, opts *DownloadOptio
 	return nil
 }
 
+// UpdateConfig 更新 yt-dlp 下载器配置
+func (d *YtdlpDownloader) UpdateConfig(cfg *config.Config) {
+	d.config = cfg
+}
+
 // DownloadWithRetry 带重试的下载
 func (d *YtdlpDownloader) DownloadWithRetry(ctx context.Context, opts *DownloadOptions, maxRetries int, progressCallback func(*ProgressInfo)) error {
 	var lastErr error
@@ -266,6 +278,10 @@ func (d *YtdlpDownloader) GetVideoInfo(ctx context.Context, url string, cookies 
 		"--no-playlist",
 	}
 
+	if d.config != nil && d.config.Proxy.IsEnabled() {
+		args = append(args, "--proxy", strings.TrimSpace(d.config.Proxy.URL))
+	}
+
 	if cookies != "" {
 		args = append(args, "--cookies", cookies)
 	}
@@ -273,6 +289,9 @@ func (d *YtdlpDownloader) GetVideoInfo(ctx context.Context, url string, cookies 
 	args = append(args, url)
 
 	cmd := exec.CommandContext(ctx, "yt-dlp", args...)
+	if d.config != nil {
+		utils.ApplyProxyEnv(cmd, d.config.Proxy)
+	}
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return nil, fmt.Errorf("获取视频信息失败: %w, 输出: %s", err, string(output))

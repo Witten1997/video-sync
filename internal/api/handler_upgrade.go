@@ -86,7 +86,7 @@ func (s *Server) handleUpgrade(c *gin.Context) {
 	tarPath := filepath.Join(tempDir, fmt.Sprintf("video-sync-%s-%s-%s.tar.gz", targetVersion, osName, arch))
 
 	// 下载文件
-	if err := downloadFile(downloadURL, tarPath); err != nil {
+	if err := s.downloadFile(downloadURL, tarPath); err != nil {
 		utils.Error("下载升级包失败: %v", err)
 		respondError(c, http.StatusInternalServerError, fmt.Sprintf("下载失败: %v", err))
 		return
@@ -119,8 +119,8 @@ func (s *Server) handleUpgrade(c *gin.Context) {
 }
 
 // downloadFile 下载文件到指定路径
-func downloadFile(url, dest string) error {
-	client := &http.Client{Timeout: 10 * time.Minute}
+func (s *Server) downloadFile(url, dest string) error {
+	client := utils.NewHTTPClient(s.config.Proxy, 10*time.Minute, 20, 10)
 	resp, err := client.Get(url)
 	if err != nil {
 		return err

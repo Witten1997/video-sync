@@ -15,6 +15,10 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("database 配置错误: %w", err)
 	}
 
+	if err := c.Proxy.Validate(); err != nil {
+		return fmt.Errorf("proxy 配置错误: %w", err)
+	}
+
 	if err := c.Sync.Validate(); err != nil {
 		return fmt.Errorf("sync 配置错误: %w", err)
 	}

@@ -45,7 +45,7 @@ func (s *Server) startVersionChecker() {
 }
 
 func (s *Server) doVersionCheck() {
-	client := &http.Client{Timeout: 15 * time.Second}
+	client := utils.NewHTTPClient(s.config.Proxy, 15*time.Second, 10, 5)
 	resp, err := client.Get("https://api.github.com/repos/Witten1997/video-sync/releases?per_page=1")
 	if err != nil {
 		utils.Warn("版本检查失败: %v", err)
