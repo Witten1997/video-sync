@@ -39,7 +39,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo \
 # ============================================
 # 阶段 3: 最终镜像
 # ============================================
-FROM video-sync-alpine-base:v0.0.2
+FROM video-sync-alpine-base:v0.0.3
 
 LABEL maintainer="video-sync"
 LABEL description="video-sync - 前端已嵌入二进制，无需Nginx"
@@ -49,6 +49,9 @@ RUN mkdir -p \
     /downloads/bilibili \
     /metadata/people \
     /var/log/video-sync
+
+RUN python3 -m pip install --no-cache-dir --break-system-packages --upgrade yt-dlp && \
+    echo "yt-dlp runtime: $(yt-dlp --version)"
 
 COPY --from=backend-builder /app/video-sync /app/
 COPY configs/config.example.yaml /app/configs/config.yaml

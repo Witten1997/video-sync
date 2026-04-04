@@ -147,6 +147,11 @@ func mergeConfigFromMap(cfg *config.Config, configMap map[string]interface{}) {
 				cfg.Paths.DownloadBase = v
 			}
 		}
+		if urlDownloadPath, exists := pathsMap["url_download_path"]; exists {
+			if v, ok := urlDownloadPath.(string); ok {
+				cfg.Paths.URLDownloadPath = v
+			}
+		}
 		if upperPath, exists := pathsMap["upper_path"]; exists {
 			if v, ok := upperPath.(string); ok {
 				cfg.Paths.UpperPath = v

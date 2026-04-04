@@ -95,6 +95,7 @@ export interface Config {
   }
   paths: {
     download_base: string
+    url_download_path: string
     upper_path: string
   }
   template: {
@@ -149,6 +150,7 @@ export interface Config {
     }
     nfo_time_type: string
     ytdlp_extra_args: string[]
+    max_retry_count: number
   }
   logging: {
     level: string

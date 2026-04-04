@@ -96,6 +96,9 @@ func (c *PathsConfig) Validate() error {
 	if c.DownloadBase == "" {
 		return errors.New("download_base 不能为空")
 	}
+	if _, err := c.NormalizedURLDownloadPath(); err != nil {
+		return fmt.Errorf("url_download_path 错误: %w", err)
+	}
 	if c.UpperPath == "" {
 		return errors.New("upper_path 不能为空")
 	}

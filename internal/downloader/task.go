@@ -218,6 +218,8 @@ func (t *DownloadTask) Clone() *DownloadTask {
 		Priority:   t.Priority,
 		Video:      t.Video,
 		Page:       t.Page,
+		RecordID:   t.RecordID,
+		URL:        t.URL,
 		OutputDir:  t.OutputDir,
 		RetryCount: t.RetryCount,
 		MaxRetries: t.MaxRetries,

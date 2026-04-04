@@ -71,8 +71,9 @@ func createDefaultConfig(v *viper.Viper) (*Config, error) {
 			ScanOnly: false,
 		},
 		Paths: PathsConfig{
-			DownloadBase: "./downloads",
-			UpperPath:    "./metadata/people",
+			DownloadBase:    "./downloads",
+			URLDownloadPath: "",
+			UpperPath:       "./metadata/people",
 		},
 		Template: TemplateConfig{
 			VideoName:  "{{title}}",

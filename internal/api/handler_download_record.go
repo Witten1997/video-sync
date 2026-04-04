@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"strconv"
 
 	"bili-download/internal/database/models"
@@ -9,6 +10,25 @@ import (
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
 )
+
+func (s *Server) retryRecordTask(record *models.DownloadRecord) (taskID string, err error) {
+	if record.SourceType == "url" {
+		if record.SourceURL == "" {
+			return "", fmt.Errorf("URL 下载记录缺少原始链接，无法重试")
+		}
+		task, err := s.downloadMgr.RetryYtdlpTask(record.ID, &record.Video, record.SourceURL, 0)
+		if err != nil {
+			return "", err
+		}
+		return task.ID, nil
+	}
+
+	task, err := s.downloadMgr.RetryVideoTask(record.ID, &record.Video, 0)
+	if err != nil {
+		return "", err
+	}
+	return task.ID, nil
+}
 
 // handleListDownloadRecords 获取下载记录列表
 func (s *Server) handleListDownloadRecords(c *gin.Context) {
@@ -128,14 +148,14 @@ func (s *Server) handleRetryDownloadRecord(c *gin.Context) {
 	s.db.Save(&record)
 
 	// 基于原有记录重试，不创建新记录
-	task, err := s.downloadMgr.RetryVideoTask(record.ID, &record.Video, 0)
+	taskID, err := s.retryRecordTask(&record)
 	if err != nil {
 		respondInternalError(c, err)
 		return
 	}
 
 	respondSuccess(c, gin.H{
-		"task_id":   task.ID,
+		"task_id":   taskID,
 		"record_id": record.ID,
 		"message":   "重试任务已创建",
 	})
@@ -167,8 +187,7 @@ func (s *Server) handleBatchRetryDownloadRecords(c *gin.Context) {
 
 	// 先重置所有记录状态，收集需要重试的记录
 	type retryItem struct {
-		recordID uint
-		video    models.Video
+		record models.DownloadRecord
 	}
 	var items []retryItem
 
@@ -200,7 +219,7 @@ func (s *Server) handleBatchRetryDownloadRecords(c *gin.Context) {
 		record.CompletedAt = nil
 		s.db.Save(&record)
 
-		items = append(items, retryItem{recordID: record.ID, video: record.Video})
+		items = append(items, retryItem{record: record})
 	}
 
 	// 立即返回响应
@@ -212,8 +231,10 @@ func (s *Server) handleBatchRetryDownloadRecords(c *gin.Context) {
 	// 异步添加重试任务
 	go func() {
 		for _, item := range items {
-			video := item.video
-			s.downloadMgr.RetryVideoTask(item.recordID, &video, 0)
+			record := item.record
+			if _, err := s.retryRecordTask(&record); err != nil {
+				continue
+			}
 		}
 	}()
 }

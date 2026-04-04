@@ -25,6 +25,7 @@ sync:
 # 路径设置
 paths:
   download_base: "/downloads/bilibili"
+  url_download_path: ""
   upper_path: "/metadata/people"
 
 # 模板设置

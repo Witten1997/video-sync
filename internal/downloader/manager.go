@@ -610,6 +610,7 @@ func (dm *DownloadManager) PrepareAndAddYtdlpTask(video *models.Video, url strin
 		record := &models.DownloadRecord{
 			VideoID:     video.ID,
 			SourceType:  "url",
+			SourceURL:   url,
 			SourceName:  "URL下载",
 			Status:      "pending",
 			FileDetails: detailsJSON,
@@ -897,6 +898,50 @@ func (dm *DownloadManager) RetryVideoTask(recordID uint, video *models.Video, pr
 	}
 
 	utils.Info("已为视频 [%s] 创建重试任务，输出目录: %s，Pages数量: %d", videoWithPages.Name, outputDir, len(videoWithPages.Pages))
+	return task, nil
+}
+
+// RetryYtdlpTask 基于已有下载记录重试 yt-dlp 下载（不创建新记录）
+func (dm *DownloadManager) RetryYtdlpTask(recordID uint, video *models.Video, sourceURL string, priority TaskPriority) (*DownloadTask, error) {
+	if strings.TrimSpace(sourceURL) == "" {
+		return nil, fmt.Errorf("URL 下载记录缺少原始链接，无法重试")
+	}
+
+	var videoData models.Video
+	if dm.db != nil {
+		if err := dm.db.First(&videoData, video.ID).Error; err != nil {
+			return nil, fmt.Errorf("加载视频数据失败: %w", err)
+		}
+	} else {
+		videoData = *video
+	}
+
+	outputDir := videoData.Path
+	if outputDir == "" {
+		videoFolderName := utils.Filenamify(videoData.Name)
+		outputDir = filepath.Join(dm.config.Paths.URLDownloadBase(), videoFolderName)
+	}
+
+	if err := os.MkdirAll(outputDir, 0755); err != nil {
+		return nil, fmt.Errorf("创建视频目录失败: %w", err)
+	}
+
+	if dm.db != nil && videoData.Path != outputDir {
+		videoData.Path = outputDir
+		dm.db.Model(&videoData).Update("path", outputDir)
+	}
+
+	task := NewDownloadTask(TaskTypeYtdlp, &videoData, nil, outputDir)
+	task.Priority = priority
+	task.RecordID = recordID
+	task.URL = sourceURL
+	task.MaxRetries = dm.getMaxRetries()
+
+	if err := dm.AddTask(task); err != nil {
+		return nil, err
+	}
+
+	utils.Info("已为URL视频 [%s] 创建重试任务，输出目录: %s", videoData.Name, outputDir)
 	return task, nil
 }
 
@@ -1245,6 +1290,7 @@ func (dm *DownloadManager) UpdateConfig(cfg *config.Config) {
 
 	// 保存旧的下载基础路径
 	oldDownloadBase := dm.config.Paths.DownloadBase
+	oldURLDownloadBase := dm.config.Paths.URLDownloadBase()
 
 	// 更新管理器的配置引用
 	dm.config = cfg
@@ -1268,6 +1314,9 @@ func (dm *DownloadManager) UpdateConfig(cfg *config.Config) {
 	}
 
 	// 如果下载基础路径发生变化，更新队列中所有待处理任务的路径
+	if oldURLDownloadBase != cfg.Paths.URLDownloadBase() {
+		dm.updateQueuedTaskPathsByType(oldURLDownloadBase, cfg.Paths.URLDownloadBase(), TaskTypeYtdlp)
+	}
 	if oldDownloadBase != cfg.Paths.DownloadBase {
 		dm.updateQueuedTaskPaths(oldDownloadBase, cfg.Paths.DownloadBase)
 	}
@@ -1344,6 +1393,64 @@ func (dm *DownloadManager) updateQueuedTaskPaths(oldBase, newBase string) {
 }
 
 // GetDownloader 获取下载器实例
+func (dm *DownloadManager) updateQueuedTaskPathsByType(oldBase, newBase string, taskType TaskType) {
+	if dm.queue == nil {
+		return
+	}
+
+	oldBase = filepath.Clean(oldBase)
+	newBase = filepath.Clean(newBase)
+
+	updatedCount := 0
+	tasks := dm.queue.GetAll()
+
+	for _, task := range tasks {
+		if task.Type != taskType {
+			continue
+		}
+		if task.Status == TaskStatusPending || task.Status == TaskStatusQueued {
+			task.mu.Lock()
+
+			oldPath := filepath.Clean(task.OutputDir)
+			if strings.HasPrefix(oldPath, oldBase) {
+				isValidPrefix := false
+				if len(oldPath) == len(oldBase) {
+					isValidPrefix = true
+				} else if len(oldPath) > len(oldBase) {
+					nextChar := oldPath[len(oldBase)]
+					if nextChar == filepath.Separator || nextChar == '/' || nextChar == '\\' {
+						isValidPrefix = true
+					}
+				}
+
+				if isValidPrefix {
+					relativePath := ""
+					if len(oldPath) > len(oldBase) {
+						relativePath = oldPath[len(oldBase):]
+						relativePath = strings.TrimPrefix(relativePath, string(filepath.Separator))
+						relativePath = strings.TrimPrefix(relativePath, "/")
+						relativePath = strings.TrimPrefix(relativePath, "\\")
+					}
+
+					if relativePath != "" {
+						task.OutputDir = filepath.Join(newBase, relativePath)
+					} else {
+						task.OutputDir = newBase
+					}
+					updatedCount++
+					utils.Debug("鏇存柊浠诲姟 %s 鐨勮緭鍑鸿矾寰? %s -> %s", task.ID, oldPath, task.OutputDir)
+				}
+			}
+
+			task.mu.Unlock()
+		}
+	}
+
+	if updatedCount > 0 {
+		utils.Info("宸叉洿鏂?%d 涓?%s 绫诲瀷寰呭鐞嗕换鍔＄殑涓嬭浇璺緞", updatedCount, taskType)
+	}
+}
+
 func (dm *DownloadManager) GetDownloader() *Downloader {
 	return dm.downloader
 }

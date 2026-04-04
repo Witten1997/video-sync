@@ -47,8 +47,9 @@ type SyncConfig struct {
 
 // PathsConfig 路径配置
 type PathsConfig struct {
-	DownloadBase string `yaml:"download_base" mapstructure:"download_base" json:"download_base"`
-	UpperPath    string `yaml:"upper_path" mapstructure:"upper_path" json:"upper_path"`
+	DownloadBase    string `yaml:"download_base" mapstructure:"download_base" json:"download_base"`
+	URLDownloadPath string `yaml:"url_download_path" mapstructure:"url_download_path" json:"url_download_path"`
+	UpperPath       string `yaml:"upper_path" mapstructure:"upper_path" json:"upper_path"`
 }
 
 // TemplateConfig 模板配置

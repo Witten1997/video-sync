@@ -10,6 +10,12 @@
             <el-form-item label="下载基础路径">
               <el-input v-model="config.paths.download_base" />
             </el-form-item>
+            <el-form-item label="URL下载路径">
+              <el-input v-model="config.paths.url_download_path" placeholder="例如: url/youtube，留空则直接使用下载基础路径" />
+              <span class="help-text">
+                实际 URL 下载目录 = 下载基础路径 + URL下载路径
+              </span>
+            </el-form-item>
             <el-form-item label="UP主信息路径">
               <el-input v-model="config.paths.upper_path" />
             </el-form-item>
@@ -583,6 +589,7 @@ const config = ref<Config>({
   },
   paths: {
     download_base: '/downloads/bilibili',
+    url_download_path: '',
     upper_path: '/metadata/people'
   },
   template: {

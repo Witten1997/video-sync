@@ -12,6 +12,7 @@ type DownloadRecord struct {
 	VideoID      uint           `gorm:"not null;index" json:"video_id"`
 	SyncLogID    *uint          `gorm:"index" json:"sync_log_id"`
 	SourceType   string         `gorm:"size:50;index" json:"source_type"`
+	SourceURL    string         `gorm:"size:1000" json:"source_url"`
 	SourceID     uint           `gorm:"index" json:"source_id"`
 	SourceName   string         `gorm:"size:255" json:"source_name"`
 	Status       string         `gorm:"size:20;not null;index;default:pending" json:"status"` // pending/downloading/completed/failed

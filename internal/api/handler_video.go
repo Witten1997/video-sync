@@ -441,7 +441,7 @@ func (s *Server) handleYtdlpDownloadByURL(c *gin.Context, rawURL string) {
 	// 检查是否已存在
 	var existingVideo models.Video
 	if s.db.Where("bvid = ?", bvid).First(&existingVideo).Error == nil {
-		task, err := s.downloadMgr.PrepareAndAddYtdlpTask(&existingVideo, rawURL, s.config.Paths.DownloadBase)
+		task, err := s.downloadMgr.PrepareAndAddYtdlpTask(&existingVideo, rawURL, s.config.Paths.URLDownloadBase())
 		if err != nil {
 			respondInternalError(c, err)
 			return
@@ -486,7 +486,7 @@ func (s *Server) handleYtdlpDownloadByURL(c *gin.Context, rawURL string) {
 	}
 
 	// 创建yt-dlp下载任务
-	task, err := s.downloadMgr.PrepareAndAddYtdlpTask(&video, rawURL, s.config.Paths.DownloadBase)
+	task, err := s.downloadMgr.PrepareAndAddYtdlpTask(&video, rawURL, s.config.Paths.URLDownloadBase())
 	if err != nil {
 		respondInternalError(c, err)
 		return

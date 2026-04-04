@@ -27,7 +27,9 @@ echo "这个镜像包含所有依赖（FFmpeg, Python, Nginx 等）"
 echo "只需要构建一次，后续可以复用"
 echo ""
 
-BASE_IMAGE="video-sync-alpine-base:latest"
+BASE_IMAGE_NAME="video-sync-alpine-base"
+BASE_IMAGE_TAG="${BASE_IMAGE_TAG:-latest}"
+BASE_IMAGE="${BASE_IMAGE_NAME}:${BASE_IMAGE_TAG}"
 
 # 检查基础镜像是否已存在
 if docker images | grep -q "video-sync-alpine-base"; then
@@ -72,7 +74,11 @@ echo ""
 
 APP_IMAGE="video-sync:v0.0.1"
 
-docker build -f Dockerfile.alpine-app -t $APP_IMAGE . || {
+docker build \
+    --build-arg BASE_IMAGE_NAME=$BASE_IMAGE_NAME \
+    --build-arg BASE_IMAGE_TAG=$BASE_IMAGE_TAG \
+    -f Dockerfile \
+    -t $APP_IMAGE . || {
     echo -e "${RED}❌ 应用镜像构建失败！${NC}"
     exit 1
 }
@@ -88,13 +94,13 @@ echo -e "${GREEN}  ✅ 构建完成！${NC}"
 echo -e "${GREEN}======================================${NC}"
 echo ""
 echo "已创建镜像："
-docker images | grep -E "video-sync-alpine-base|video-sync.*alpine" | head -5
+docker images | grep -E "video-sync-alpine-base|video-sync" | head -5
 echo ""
 
 # 显示镜像大小对比
 echo -e "${YELLOW}镜像大小对比：${NC}"
-BASE_SIZE=$(docker images video-sync-alpine-base:latest --format "{{.Size}}")
-APP_SIZE=$(docker images video-sync:alpine --format "{{.Size}}")
+BASE_SIZE=$(docker images $BASE_IMAGE --format "{{.Size}}")
+APP_SIZE=$(docker images $APP_IMAGE --format "{{.Size}}")
 echo "  基础镜像: $BASE_SIZE"
 echo "  应用镜像: $APP_SIZE"
 echo ""
