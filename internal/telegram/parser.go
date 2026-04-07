@@ -33,7 +33,7 @@ func ParseMessageForChat(text string, maxURLs int, chatType string, botUsername 
 		if commandBody == "" {
 			return ParseResult{
 				Kind:      ParseResultKindReject,
-				ReplyText: "Usage: /download <url>",
+				ReplyText: "用法：/download <url>",
 			}
 		}
 		return parseURLText(commandBody, maxURLs, true)
@@ -43,6 +43,13 @@ func ParseMessageForChat(text string, maxURLs int, chatType string, botUsername 
 		return ParseResult{
 			Kind:   ParseResultKindStatus,
 			TaskID: strings.TrimSpace(commandArgument(command)),
+		}
+	}
+
+	if _, addressed := parseCommand(trimmed, "help", normalizedBotUsername, groupScoped); addressed {
+		return ParseResult{
+			Kind:      ParseResultKindHelp,
+			ReplyText: buildHelpText(),
 		}
 	}
 
@@ -63,7 +70,7 @@ func parseURLText(text string, maxURLs int, command bool) ParseResult {
 		if command {
 			return ParseResult{
 				Kind:      ParseResultKindReject,
-				ReplyText: "Usage: /download <url>",
+				ReplyText: "用法：/download <url>",
 			}
 		}
 		return ParseResult{Kind: ParseResultKindIgnore}
@@ -76,7 +83,7 @@ func parseURLText(text string, maxURLs int, command bool) ParseResult {
 	if len(urls) > maxURLs {
 		return ParseResult{
 			Kind:      ParseResultKindReject,
-			ReplyText: "Only one URL is supported per message.",
+			ReplyText: "每条消息只支持一个 URL。",
 		}
 	}
 
@@ -134,6 +141,19 @@ func isStatusCommand(text string) bool {
 	}
 
 	return fields[0] == "/status"
+}
+
+func buildHelpText() string {
+	return strings.Join([]string{
+		"可用命令：",
+		"/download <url> - 提交下载链接",
+		"/status [任务ID] - 查询最近请求或指定任务状态",
+		"/help - 查看帮助",
+		"",
+		"使用说明：",
+		"1. 私聊可直接发送单个 URL。",
+		"2. 群聊请使用 /download@botname、/status@botname、/help@botname，或以 @botname 开头。",
+	}, "\n")
 }
 
 func commandArgument(text string) string {

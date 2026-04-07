@@ -227,6 +227,23 @@ export interface TelegramReconnectResult {
   message: string
 }
 
+export interface TelegramAccessCandidate {
+  id: number
+  chat_id: number
+  user_id: number
+  chat_type: string
+  username: string
+  first_name: string
+  last_name: string
+  last_message: string
+  status: string
+  first_seen_at: string
+  last_seen_at: string
+  approved_at: string | null
+  created_at: string
+  updated_at: string
+}
+
 // 仪表盘统计数据
 export interface DashboardStats {
   total_video_sources: number

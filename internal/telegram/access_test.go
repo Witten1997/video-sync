@@ -56,3 +56,15 @@ func TestCheckAccessAllowsConfiguredGroupChatTypes(t *testing.T) {
 		t.Fatalf("expected supergroup chat to pass allowlist, got %v", err)
 	}
 }
+
+func TestCheckAccessRejectsWhenNoAllowlistIsConfigured(t *testing.T) {
+	t.Parallel()
+
+	cfg := AccessConfig{
+		AllowedChatTypes: []string{"private"},
+	}
+
+	if err := CheckAccess(cfg, 1001, 2001, "private"); err == nil {
+		t.Fatal("expected empty allowlists to deny access")
+	}
+}

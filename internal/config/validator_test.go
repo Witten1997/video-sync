@@ -118,6 +118,23 @@ func TestTelegramConfigValidateAllowsGroupChatTypes(t *testing.T) {
 	}
 }
 
+func TestTelegramConfigValidateAllowsEmptyAllowlist(t *testing.T) {
+	t.Parallel()
+
+	cfg := TelegramConfig{
+		Enabled:            true,
+		BotToken:           "123:token",
+		Mode:               "polling",
+		PollTimeoutSeconds: 30,
+		AllowedChatTypes:   []string{"private"},
+		MaxURLsPerMessage:  1,
+	}
+
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("expected empty allowlists to validate for pending approvals flow, got %v", err)
+	}
+}
+
 func TestTelegramConfigValidateRejectsUnsupportedChatType(t *testing.T) {
 	t.Parallel()
 

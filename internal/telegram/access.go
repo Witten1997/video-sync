@@ -15,6 +15,10 @@ func CheckAccess(cfg AccessConfig, chatID int64, userID int64, chatType string) 
 		return errAccessDenied
 	}
 
+	if len(cfg.AllowedChatIDs) == 0 && len(cfg.AllowedUserIDs) == 0 {
+		return errAccessDenied
+	}
+
 	if len(cfg.AllowedChatIDs) > 0 && !containsInt64(cfg.AllowedChatIDs, chatID) {
 		return errAccessDenied
 	}

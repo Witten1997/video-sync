@@ -24,12 +24,13 @@ const recentWebhookUpdateLimit = 1024
 var errReconnectRequested = errors.New("telegram reconnect requested")
 
 type BotService struct {
-	cfg                *config.Config
-	client             BotAPI
-	clientFactory      func(config.TelegramConfig, config.ProxyConfig) BotAPI
-	runtimeStore       RuntimeStateStore
-	requestStore       *RequestStore
-	urlDownloadService downloadservice.URLDownloadSubmitter
+	cfg                  *config.Config
+	client               BotAPI
+	clientFactory        func(config.TelegramConfig, config.ProxyConfig) BotAPI
+	runtimeStore         RuntimeStateStore
+	requestStore         *RequestStore
+	accessCandidateStore AccessCandidateStore
+	urlDownloadService   downloadservice.URLDownloadSubmitter
 
 	mu                 sync.RWMutex
 	webhookMu          sync.Mutex
@@ -47,10 +48,11 @@ func NewBotService(cfg *config.Config, db *gorm.DB, urlDownloadService downloads
 		clientFactory: func(cfg config.TelegramConfig, proxyCfg config.ProxyConfig) BotAPI {
 			return NewClient(cfg.BotToken, cfg.PollTimeoutSeconds, proxyCfg)
 		},
-		runtimeStore:       newRuntimeStateStore(db),
-		requestStore:       NewRequestStore(db),
-		urlDownloadService: urlDownloadService,
-		webhookUpdateIDs:   make(map[int64]struct{}),
+		runtimeStore:         newRuntimeStateStore(db),
+		requestStore:         NewRequestStore(db),
+		accessCandidateStore: NewAccessCandidateStore(db),
+		urlDownloadService:   urlDownloadService,
+		webhookUpdateIDs:     make(map[int64]struct{}),
 	}
 
 	if cfg != nil {
@@ -261,7 +263,8 @@ func (s *BotService) handleUpdate(ctx context.Context, update Update) error {
 		AllowedUserIDs:   telegramCfg.AllowedUserIDs,
 	}, message.Chat.ID, message.From.ID, message.Chat.Type)
 	if accessErr != nil {
-		s.sendReply(ctx, message.Chat.ID, "Access denied.", message.MessageID)
+		s.captureAccessCandidate(ctx, message)
+		s.sendReply(ctx, message.Chat.ID, "无权使用该机器人，请先在管理后台批准当前会话。", message.MessageID)
 		return nil
 	}
 
@@ -271,6 +274,9 @@ func (s *BotService) handleUpdate(ctx context.Context, update Update) error {
 	case ParseResultKindReject:
 		_, _ = s.sendReply(ctx, message.Chat.ID, result.ReplyText, message.MessageID)
 		return nil
+	case ParseResultKindHelp:
+		_, _ = s.sendReply(ctx, message.Chat.ID, result.ReplyText, message.MessageID)
+		return nil
 	case ParseResultKindStatus:
 		return s.handleStatusQuery(ctx, message.Chat.ID, message.From.ID, message.MessageID, result.TaskID)
 	case ParseResultKindSubmit:
@@ -278,6 +284,22 @@ func (s *BotService) handleUpdate(ctx context.Context, update Update) error {
 	default:
 		return nil
 	}
+}
+
+func (s *BotService) captureAccessCandidate(ctx context.Context, message *Message) {
+	if s.accessCandidateStore == nil || message == nil || message.Chat == nil || message.From == nil {
+		return
+	}
+
+	_ = s.accessCandidateStore.Capture(ctx, AccessCandidateInput{
+		ChatID:      message.Chat.ID,
+		UserID:      message.From.ID,
+		ChatType:    message.Chat.Type,
+		Username:    message.From.Username,
+		FirstName:   message.From.FirstName,
+		LastName:    message.From.LastName,
+		LastMessage: message.Text,
+	})
 }
 
 func (s *BotService) resolveBotName(ctx context.Context, client BotAPI) (string, error) {
@@ -462,7 +484,7 @@ func (s *BotService) handleSubmission(ctx context.Context, update Update, messag
 		var downloadErr *downloadservice.URLDownloadError
 		if errors.As(err, &downloadErr) && downloadErr.Type == downloadservice.URLDownloadErrorTypeValidation {
 			_ = s.requestStore.MarkFailed(ctx, requestLog.ID, downloadErr.Error())
-			_, _ = s.sendReply(ctx, message.Chat.ID, "Submit failed: "+downloadErr.Error(), message.MessageID)
+			_, _ = s.sendReply(ctx, message.Chat.ID, "提交失败："+downloadErr.Error(), message.MessageID)
 			return nil
 		}
 		return err
@@ -507,7 +529,7 @@ func (s *BotService) buildStatusResponse(ctx context.Context, chatID int64, user
 		summary, err := s.requestStore.FindByTaskID(ctx, chatID, userID, taskID)
 		if err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
-				return "No matching task found.", nil
+				return "未找到匹配的任务。", nil
 			}
 			return "", err
 		}
@@ -520,10 +542,10 @@ func (s *BotService) buildStatusResponse(ctx context.Context, chatID int64, user
 		return "", err
 	}
 	if len(items) == 0 {
-		return "No recent requests.", nil
+		return "暂无最近请求。", nil
 	}
 
-	lines := []string{"Recent requests:"}
+	lines := []string{"最近请求："}
 	for _, item := range items {
 		lines = append(lines, formatStatusSummary(item))
 	}
@@ -536,21 +558,36 @@ func formatStatusSummary(item RequestSummary) string {
 		status = item.RecordStatus
 	}
 
-	lines := []string{"Status: " + status}
+	lines := []string{"状态：" + localizeRequestStatus(status)}
 	if item.Title != "" {
-		lines = append(lines, "Title: "+item.Title)
+		lines = append(lines, "标题："+item.Title)
 	}
 	if item.Log.TaskID != "" {
-		lines = append(lines, "Task ID: "+item.Log.TaskID)
+		lines = append(lines, "任务 ID："+item.Log.TaskID)
 	}
 	if item.Log.RecordID != nil {
-		lines = append(lines, "Record ID: "+fmt.Sprint(*item.Log.RecordID))
+		lines = append(lines, "记录 ID："+fmt.Sprint(*item.Log.RecordID))
 	}
 	if item.ErrorMessage != "" {
-		lines = append(lines, "Reason: "+item.ErrorMessage)
+		lines = append(lines, "原因："+item.ErrorMessage)
 	}
 
 	return strings.Join(lines, "\n")
+}
+
+func localizeRequestStatus(status string) string {
+	switch strings.TrimSpace(status) {
+	case TelegramRequestStatusPending:
+		return "待处理"
+	case TelegramRequestStatusQueued:
+		return "已受理"
+	case TelegramRequestStatusCompleted:
+		return "已完成"
+	case TelegramRequestStatusFailed:
+		return "失败"
+	default:
+		return status
+	}
 }
 
 func (s *BotService) runNotifier(ctx context.Context) {

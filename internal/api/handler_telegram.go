@@ -5,11 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"reflect"
 	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
 
+	"bili-download/internal/config"
 	"bili-download/internal/database/models"
 	"bili-download/internal/telegram"
 
@@ -20,6 +22,11 @@ import (
 type telegramTestSendRequest struct {
 	ChatID  int64  `json:"chat_id"`
 	Message string `json:"message"`
+}
+
+type telegramApproveAccessCandidateRequest struct {
+	ApproveChatID bool `json:"approve_chat_id"`
+	ApproveUserID bool `json:"approve_user_id"`
 }
 
 func (s *Server) handleTelegramStatus(c *gin.Context) {
@@ -107,6 +114,96 @@ func (s *Server) handleTelegramRequestLogs(c *gin.Context) {
 		"page":        page,
 		"page_size":   pageSize,
 		"total_pages": (total + int64(pageSize) - 1) / int64(pageSize),
+	})
+}
+
+func (s *Server) handleTelegramAccessCandidates(c *gin.Context) {
+	if s.telegramAccessCandidateStore == nil {
+		respondError(c, http.StatusServiceUnavailable, "telegram access candidate store is not available")
+		return
+	}
+
+	items, err := s.telegramAccessCandidateStore.ListPending(c.Request.Context(), 50)
+	if err != nil {
+		respondInternalError(c, err)
+		return
+	}
+
+	respondSuccess(c, items)
+}
+
+func (s *Server) handleTelegramApproveAccessCandidate(c *gin.Context) {
+	if s.config == nil {
+		respondInternalError(c, errors.New("telegram config is not loaded"))
+		return
+	}
+	if s.telegramAccessCandidateStore == nil {
+		respondError(c, http.StatusServiceUnavailable, "telegram access candidate store is not available")
+		return
+	}
+
+	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
+	if err != nil || id == 0 {
+		respondValidationError(c, "invalid candidate id")
+		return
+	}
+
+	var req telegramApproveAccessCandidateRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		respondValidationError(c, err.Error())
+		return
+	}
+	if !req.ApproveChatID && !req.ApproveUserID {
+		respondValidationError(c, "at least one approval target must be selected")
+		return
+	}
+
+	candidate, err := s.telegramAccessCandidateStore.GetByID(c.Request.Context(), uint(id))
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			respondError(c, http.StatusNotFound, "telegram access candidate not found")
+			return
+		}
+		respondInternalError(c, err)
+		return
+	}
+
+	newConfig := *s.config
+	if req.ApproveChatID {
+		newConfig.Telegram.AllowedChatIDs = appendUniqueInt64(newConfig.Telegram.AllowedChatIDs, candidate.ChatID)
+	}
+	if req.ApproveUserID {
+		newConfig.Telegram.AllowedUserIDs = appendUniqueInt64(newConfig.Telegram.AllowedUserIDs, candidate.UserID)
+	}
+	if candidate.ChatType != "" {
+		newConfig.Telegram.AllowedChatTypes = appendUniqueString(newConfig.Telegram.AllowedChatTypes, candidate.ChatType)
+	}
+
+	if err := newConfig.Validate(); err != nil {
+		respondValidationError(c, fmt.Sprintf("config validation failed: %v", err))
+		return
+	}
+	if err := config.Save(&newConfig, s.configPath); err != nil {
+		respondInternalError(c, err)
+		return
+	}
+
+	if err := s.applyTelegramRuntimeConfig(&newConfig); err != nil {
+		respondInternalError(c, err)
+		return
+	}
+	s.config = &newConfig
+
+	if err := s.telegramAccessCandidateStore.MarkApproved(c.Request.Context(), uint(id)); err != nil {
+		respondInternalError(c, err)
+		return
+	}
+
+	respondSuccess(c, gin.H{
+		"message":            "telegram access candidate approved",
+		"allowed_chat_ids":   newConfig.Telegram.AllowedChatIDs,
+		"allowed_user_ids":   newConfig.Telegram.AllowedUserIDs,
+		"allowed_chat_types": newConfig.Telegram.AllowedChatTypes,
 	})
 }
 
@@ -211,4 +308,38 @@ func (s *Server) handleTelegramWebhook(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"ok": true})
+}
+
+func (s *Server) applyTelegramRuntimeConfig(newConfig *config.Config) error {
+	telegramChanged := s.config == nil || !reflect.DeepEqual(s.config.Telegram, newConfig.Telegram)
+	if !telegramChanged || s.telegramService == nil {
+		return nil
+	}
+
+	if _, err := s.telegramService.ApplyConfig(newConfig); err != nil {
+		return err
+	}
+	return nil
+}
+
+func appendUniqueInt64(values []int64, value int64) []int64 {
+	for _, existing := range values {
+		if existing == value {
+			return values
+		}
+	}
+	return append(values, value)
+}
+
+func appendUniqueString(values []string, value string) []string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return values
+	}
+	for _, existing := range values {
+		if existing == value {
+			return values
+		}
+	}
+	return append(values, value)
 }

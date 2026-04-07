@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -63,6 +64,11 @@ type botScopedRecordingRuntimeStateStore struct {
 type webhookCall struct {
 	url    string
 	secret string
+}
+
+type recordingAccessCandidateStore struct {
+	mu         sync.Mutex
+	candidates []models.TelegramAccessCandidate
 }
 
 func (f *fakeBotAPI) GetMe(context.Context) (*User, error) {
@@ -235,6 +241,34 @@ func (f *reconnectBlockingBotAPI) DeleteWebhook(_ context.Context, dropPendingUp
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.deleteCalls = append(f.deleteCalls, dropPendingUpdates)
+	return nil
+}
+
+func (s *recordingAccessCandidateStore) Capture(_ context.Context, candidate AccessCandidateInput) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.candidates = append(s.candidates, models.TelegramAccessCandidate{
+		ChatID:      candidate.ChatID,
+		UserID:      candidate.UserID,
+		ChatType:    candidate.ChatType,
+		Username:    candidate.Username,
+		FirstName:   candidate.FirstName,
+		LastMessage: candidate.LastMessage,
+		Status:      TelegramAccessCandidateStatusPending,
+	})
+	return nil
+}
+
+func (s *recordingAccessCandidateStore) ListPending(context.Context, int) ([]models.TelegramAccessCandidate, error) {
+	return nil, nil
+}
+
+func (s *recordingAccessCandidateStore) GetByID(context.Context, uint) (*models.TelegramAccessCandidate, error) {
+	return nil, nil
+}
+
+func (s *recordingAccessCandidateStore) MarkApproved(context.Context, uint) error {
 	return nil
 }
 
@@ -1281,7 +1315,117 @@ func TestBotServiceHandleUpdateRejectsMentionedUnauthorizedGroupMessage(t *testi
 	if len(client.sendCalls) != 1 {
 		t.Fatalf("expected one access-denied reply, got %d sends", len(client.sendCalls))
 	}
-	if client.sendCalls[0].text != "Access denied." {
+	if client.sendCalls[0].text != "无权使用该机器人，请先在管理后台批准当前会话。" {
 		t.Fatalf("expected access denied reply, got %q", client.sendCalls[0].text)
+	}
+}
+
+func TestBotServiceHandleUpdateCapturesPendingCandidateForUnauthorizedSender(t *testing.T) {
+	t.Parallel()
+
+	client := &fakeBotAPI{}
+	candidateStore := &recordingAccessCandidateStore{}
+	service := &BotService{
+		cfg: &config.Config{
+			Telegram: config.TelegramConfig{
+				Enabled:           true,
+				Mode:              "polling",
+				BotToken:          "123:token",
+				AllowedChatTypes:  []string{"private"},
+				MaxURLsPerMessage: 1,
+			},
+		},
+		client:               client,
+		accessCandidateStore: candidateStore,
+	}
+
+	err := service.handleUpdate(context.Background(), Update{
+		UpdateID: 57,
+		Message: &Message{
+			MessageID: 12,
+			Text:      "https://example.com/video",
+			Chat:      &Chat{ID: 1001, Type: "private"},
+			From:      &User{ID: 2002, Username: "demo-user", FirstName: "Demo"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("expected unauthorized message to be handled without error, got %v", err)
+	}
+	if len(client.sendCalls) != 1 {
+		t.Fatalf("expected one access-denied reply, got %d sends", len(client.sendCalls))
+	}
+
+	candidateStore.mu.Lock()
+	defer candidateStore.mu.Unlock()
+	if len(candidateStore.candidates) != 1 {
+		t.Fatalf("expected one pending candidate to be captured, got %d", len(candidateStore.candidates))
+	}
+	candidate := candidateStore.candidates[0]
+	if candidate.ChatID != 1001 || candidate.UserID != 2002 {
+		t.Fatalf("expected candidate ids to match message sender, got %+v", candidate)
+	}
+	if candidate.LastMessage != "https://example.com/video" {
+		t.Fatalf("expected candidate last message to be stored, got %q", candidate.LastMessage)
+	}
+	if candidate.Status != TelegramAccessCandidateStatusPending {
+		t.Fatalf("expected pending status, got %q", candidate.Status)
+	}
+}
+
+func TestBotServiceHandleUpdateRepliesHelpInChinese(t *testing.T) {
+	t.Parallel()
+
+	client := &fakeBotAPI{}
+	service := &BotService{
+		cfg: &config.Config{
+			Telegram: config.TelegramConfig{
+				Enabled:           true,
+				Mode:              "polling",
+				BotToken:          "123:token",
+				AllowedChatTypes:  []string{"private"},
+				AllowedChatIDs:    []int64{1001},
+				MaxURLsPerMessage: 1,
+				NotifyOnAccept:    true,
+				NotifyOnComplete:  true,
+				NotifyOnFail:      true,
+			},
+		},
+		client: client,
+	}
+
+	err := service.handleUpdate(context.Background(), Update{
+		UpdateID: 58,
+		Message: &Message{
+			MessageID: 13,
+			Text:      "/help",
+			Chat:      &Chat{ID: 1001, Type: "private"},
+			From:      &User{ID: 2002, Username: "demo-user", FirstName: "Demo"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("expected help command to be handled without error, got %v", err)
+	}
+	if len(client.sendCalls) != 1 {
+		t.Fatalf("expected one help reply, got %d sends", len(client.sendCalls))
+	}
+	if !strings.HasPrefix(client.sendCalls[0].text, "可用命令：") {
+		t.Fatalf("expected chinese help reply, got %q", client.sendCalls[0].text)
+	}
+}
+
+func TestBuildStatusResponseUsesChineseText(t *testing.T) {
+	t.Parallel()
+
+	text := formatStatusSummary(RequestSummary{
+		Log: models.TelegramRequestLog{
+			Status: "queued",
+			TaskID: "task-1",
+		},
+		Title:        "演示视频",
+		ErrorMessage: "网络错误",
+	})
+
+	if text != "状态：已受理\n标题：演示视频\n任务 ID：task-1\n原因：网络错误" {
+		t.Fatalf("expected chinese status summary, got %q", text)
 	}
 }

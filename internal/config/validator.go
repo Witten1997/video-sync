@@ -291,9 +291,5 @@ func (c *TelegramConfig) Validate() error {
 			return errors.New("allowed_chat_types only supports private, group, and supergroup")
 		}
 	}
-	if len(c.AllowedChatIDs) == 0 && len(c.AllowedUserIDs) == 0 {
-		return errors.New("at least one telegram allowlist must be configured")
-	}
-
 	return nil
 }

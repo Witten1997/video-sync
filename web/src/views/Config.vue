@@ -504,6 +504,61 @@
                 <el-switch v-model="config.telegram.notify_on_fail" />
               </el-form-item>
             </el-form>
+
+            <el-card class="telegram-status-card" shadow="never">
+              <template #header>
+                <div class="telegram-status-header">
+                  <span>待批准会话</span>
+                  <el-button link type="primary" @click="loadTelegramAccessCandidates">刷新</el-button>
+                </div>
+              </template>
+
+              <el-empty
+                v-if="!telegramAccessCandidatesLoading && telegramAccessCandidates.length === 0"
+                description="暂无待批准会话"
+              />
+
+              <el-table
+                v-else
+                :data="telegramAccessCandidates"
+                v-loading="telegramAccessCandidatesLoading"
+                style="width: 100%"
+              >
+                <el-table-column label="Chat / User" min-width="180">
+                  <template #default="{ row }">
+                    <div>{{ row.chat_id }}</div>
+                    <div class="subtext">{{ row.user_id }}</div>
+                  </template>
+                </el-table-column>
+                <el-table-column label="身份" min-width="180">
+                  <template #default="{ row }">
+                    <div>{{ formatTelegramCandidateName(row) }}</div>
+                    <div class="subtext">{{ row.username ? `@${row.username}` : row.chat_type }}</div>
+                  </template>
+                </el-table-column>
+                <el-table-column prop="last_message" label="最近消息" min-width="260" show-overflow-tooltip />
+                <el-table-column label="最近出现" min-width="180">
+                  <template #default="{ row }">
+                    {{ formatStatusTime(row.last_seen_at) }}
+                  </template>
+                </el-table-column>
+                <el-table-column label="操作" min-width="240" fixed="right">
+                  <template #default="{ row }">
+                    <el-space wrap>
+                      <el-button size="small" @click="handleApproveTelegramAccessCandidate(row, 'chat')">
+                        加入 Chat
+                      </el-button>
+                      <el-button size="small" @click="handleApproveTelegramAccessCandidate(row, 'user')">
+                        加入 User
+                      </el-button>
+                      <el-button type="primary" size="small" @click="handleApproveTelegramAccessCandidate(row, 'both')">
+                        全部批准
+                      </el-button>
+                    </el-space>
+                  </template>
+                </el-table-column>
+              </el-table>
+            </el-card>
           </div>
         </el-tab-pane>
 
@@ -641,7 +696,13 @@ import { computed, ref, onMounted, onUnmounted, nextTick } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Refresh, Upload, Clock, SuccessFilled, CircleCheckFilled, CircleCloseFilled } from '@element-plus/icons-vue'
 import { getConfig, updateConfig, validateBilibiliCredential, generateQRCode, pollQRCodeStatus } from '@/api/config'
-import { getTelegramStatus, reconnectTelegram, sendTelegramTestMessage } from '@/api/telegram'
+import {
+  approveTelegramAccessCandidate,
+  getTelegramAccessCandidates,
+  getTelegramStatus,
+  reconnectTelegram,
+  sendTelegramTestMessage
+} from '@/api/telegram'
 import { getYtdlpVersionInfo, updateYtdlpVersion } from '@/api/ytdlp'
 import { getVersionInfo, checkVersion, doUpgrade } from '@/api/version'
 import { useRouter } from 'vue-router'
@@ -650,7 +711,7 @@ import QRCode from 'qrcode'
 defineOptions({
   name: 'Config'
 })
-import type { Config, TelegramRuntimeStatus } from '@/types'
+import type { Config, TelegramAccessCandidate, TelegramRuntimeStatus } from '@/types'
 
 // 帮助文本
 const videoNameHelp = '{{bvid}}, {{title}}, {{upper_name}}, {{pubtime}}'
@@ -684,10 +745,12 @@ const telegramStatus = ref<TelegramRuntimeStatus>({
 })
 const telegramReconnectLoading = ref(false)
 const telegramTestSendLoading = ref(false)
+const telegramAccessCandidatesLoading = ref(false)
 const telegramTestSend = ref({
   chat_id: '',
   message: ''
 })
+const telegramAccessCandidates = ref<TelegramAccessCandidate[]>([])
 
 // yt-dlp 版本管理
 const ytdlpVersion = ref({
@@ -969,6 +1032,17 @@ const loadTelegramRuntimeStatus = async () => {
   }
 }
 
+const loadTelegramAccessCandidates = async () => {
+  telegramAccessCandidatesLoading.value = true
+  try {
+    telegramAccessCandidates.value = await getTelegramAccessCandidates()
+  } catch (error) {
+    console.error('load telegram access candidates failed:', error)
+  } finally {
+    telegramAccessCandidatesLoading.value = false
+  }
+}
+
 const goToTelegramRequests = () => {
   router.push({ name: 'TelegramRequests' })
 }
@@ -1021,6 +1095,36 @@ const handleTelegramTestSend = async () => {
     ElMessage.error(errorMsg)
   } finally {
     telegramTestSendLoading.value = false
+  }
+}
+
+const formatTelegramCandidateName = (candidate: TelegramAccessCandidate) => {
+  const parts = [candidate.first_name, candidate.last_name].filter(Boolean)
+  if (parts.length > 0) {
+    return parts.join(' ')
+  }
+  if (candidate.username) {
+    return `@${candidate.username}`
+  }
+  return '-'
+}
+
+const handleApproveTelegramAccessCandidate = async (
+  candidate: TelegramAccessCandidate,
+  mode: 'chat' | 'user' | 'both'
+) => {
+  try {
+    await approveTelegramAccessCandidate(candidate.id, {
+      approve_chat_id: mode === 'chat' || mode === 'both',
+      approve_user_id: mode === 'user' || mode === 'both'
+    })
+    ElMessage.success('已加入 Telegram 白名单')
+    await loadData({ validateCredential: false })
+    await loadTelegramRuntimeStatus()
+    await loadTelegramAccessCandidates()
+  } catch (error: any) {
+    const errorMsg = error?.response?.data?.message || error?.message || '批准 Telegram 会话失败'
+    ElMessage.error(errorMsg)
   }
 }
 
@@ -1098,6 +1202,7 @@ const handleSave = async () => {
     if (activeTab.value === 'telegram') {
       await loadData({ validateCredential: false })
       await loadTelegramRuntimeStatus()
+      await loadTelegramAccessCandidates()
     }
   } catch (error) {
     console.error('保存配置失败:', error)
@@ -1368,6 +1473,7 @@ const handleCancelQRCode = () => {
 onMounted(() => {
   loadData()
   loadTelegramRuntimeStatus()
+  loadTelegramAccessCandidates()
   checkYtdlpVersion()
   loadAppVersion()
 })
@@ -1475,6 +1581,11 @@ onUnmounted(() => {
 
 .telegram-chat-id-field {
   max-width: 280px;
+}
+
+.subtext {
+  font-size: 12px;
+  color: #94a3b8;
 }
 
 /* ==================== 二维码登录样式 ==================== */

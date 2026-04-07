@@ -19,4 +19,7 @@ func TestBuildCompletionReplyUsesSingleMessageUpdate(t *testing.T) {
 	if reply.Text == "" {
 		t.Fatal("expected non-empty completion text")
 	}
+	if reply.Text != "下载完成。\n标题：demo video\n记录 ID：99" {
+		t.Fatalf("expected chinese completion reply, got %q", reply.Text)
+	}
 }

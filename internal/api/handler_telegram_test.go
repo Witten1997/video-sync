@@ -4,11 +4,14 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"bili-download/internal/config"
+	"bili-download/internal/database/models"
 	"bili-download/internal/telegram"
 
 	"github.com/gin-gonic/gin"
@@ -23,6 +26,14 @@ type fakeTelegramService struct {
 	reconnectFn           func() error
 	applyConfigFn         func(*config.Config) (bool, error)
 	handleWebhookUpdateFn func(context.Context, telegram.Update) error
+}
+
+type fakeTelegramAccessCandidateStore struct {
+	items        []models.TelegramAccessCandidate
+	lastApproved uint
+	markApproved func(context.Context, uint) error
+	listPending  func(context.Context, int) ([]models.TelegramAccessCandidate, error)
+	getByID      func(context.Context, uint) (*models.TelegramAccessCandidate, error)
 }
 
 func (f *fakeTelegramAPI) GetMe(context.Context) (*telegram.User, error) {
@@ -73,6 +84,38 @@ func (f *fakeTelegramService) ApplyConfig(cfg *config.Config) (bool, error) {
 func (f *fakeTelegramService) HandleWebhookUpdate(ctx context.Context, update telegram.Update) error {
 	if f.handleWebhookUpdateFn != nil {
 		return f.handleWebhookUpdateFn(ctx, update)
+	}
+	return nil
+}
+
+func (f *fakeTelegramAccessCandidateStore) Capture(context.Context, telegram.AccessCandidateInput) error {
+	return nil
+}
+
+func (f *fakeTelegramAccessCandidateStore) ListPending(ctx context.Context, limit int) ([]models.TelegramAccessCandidate, error) {
+	if f.listPending != nil {
+		return f.listPending(ctx, limit)
+	}
+	return f.items, nil
+}
+
+func (f *fakeTelegramAccessCandidateStore) GetByID(ctx context.Context, id uint) (*models.TelegramAccessCandidate, error) {
+	if f.getByID != nil {
+		return f.getByID(ctx, id)
+	}
+	for _, item := range f.items {
+		if item.ID == id {
+			copy := item
+			return &copy, nil
+		}
+	}
+	return nil, errors.New("not found")
+}
+
+func (f *fakeTelegramAccessCandidateStore) MarkApproved(ctx context.Context, id uint) error {
+	f.lastApproved = id
+	if f.markApproved != nil {
+		return f.markApproved(ctx, id)
 	}
 	return nil
 }
@@ -361,5 +404,115 @@ func TestHandleTelegramWebhookRejectsInvalidSecret(t *testing.T) {
 
 	if recorder.Code != http.StatusUnauthorized {
 		t.Fatalf("expected status %d, got %d", http.StatusUnauthorized, recorder.Code)
+	}
+}
+
+func TestHandleTelegramAccessCandidatesListsPendingItems(t *testing.T) {
+	t.Parallel()
+
+	gin.SetMode(gin.TestMode)
+
+	now := time.Now().UTC()
+	server := &Server{
+		telegramAccessCandidateStore: &fakeTelegramAccessCandidateStore{
+			items: []models.TelegramAccessCandidate{
+				{
+					ID:          7,
+					ChatID:      1001,
+					UserID:      2002,
+					ChatType:    "private",
+					Username:    "demo-user",
+					FirstName:   "Demo",
+					LastMessage: "https://example.com/video",
+					Status:      telegram.TelegramAccessCandidateStatusPending,
+					LastSeenAt:  now,
+					CreatedAt:   now,
+					UpdatedAt:   now,
+				},
+			},
+		},
+	}
+
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Request = httptest.NewRequest(http.MethodGet, "/api/telegram/access-candidates", nil)
+
+	server.handleTelegramAccessCandidates(ctx)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, recorder.Code)
+	}
+
+	var resp Response
+	if err := json.Unmarshal(recorder.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+	data, ok := resp.Data.([]interface{})
+	if !ok {
+		t.Fatalf("expected response array, got %T", resp.Data)
+	}
+	if len(data) != 1 {
+		t.Fatalf("expected one candidate, got %d", len(data))
+	}
+}
+
+func TestHandleTelegramApproveAccessCandidateAddsAllowlistEntriesAndMarksApproved(t *testing.T) {
+	t.Parallel()
+
+	gin.SetMode(gin.TestMode)
+
+	cfg, configPath := loadConfigForUpdateHandlerTest(t)
+	cfg.Telegram.Enabled = true
+	cfg.Telegram.BotToken = "123:token"
+	cfg.Telegram.Mode = "polling"
+	cfg.Telegram.PollTimeoutSeconds = 30
+	cfg.Telegram.AllowedChatTypes = []string{"private"}
+	cfg.Telegram.AllowedChatIDs = nil
+	cfg.Telegram.AllowedUserIDs = nil
+	cfg.Telegram.MaxURLsPerMessage = 1
+
+	store := &fakeTelegramAccessCandidateStore{
+		items: []models.TelegramAccessCandidate{
+			{
+				ID:        9,
+				ChatID:    1001,
+				UserID:    2002,
+				ChatType:  "group",
+				Status:    telegram.TelegramAccessCandidateStatusPending,
+				CreatedAt: time.Now().UTC(),
+				UpdatedAt: time.Now().UTC(),
+			},
+		},
+	}
+
+	server := &Server{
+		config:                       cfg,
+		configPath:                   configPath,
+		telegramAccessCandidateStore: store,
+		telegramService:              &fakeTelegramService{},
+	}
+
+	recorder := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(recorder)
+	ctx.Params = gin.Params{{Key: "id", Value: "9"}}
+	ctx.Request = httptest.NewRequest(http.MethodPost, "/api/telegram/access-candidates/9/approve", bytes.NewBufferString(`{"approve_chat_id":true,"approve_user_id":true}`))
+	ctx.Request.Header.Set("Content-Type", "application/json")
+
+	server.handleTelegramApproveAccessCandidate(ctx)
+
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("expected status %d, got %d", http.StatusOK, recorder.Code)
+	}
+	if store.lastApproved != 9 {
+		t.Fatalf("expected candidate 9 to be marked approved, got %d", store.lastApproved)
+	}
+	if len(server.config.Telegram.AllowedChatIDs) != 1 || server.config.Telegram.AllowedChatIDs[0] != 1001 {
+		t.Fatalf("expected chat id 1001 in allowlist, got %#v", server.config.Telegram.AllowedChatIDs)
+	}
+	if len(server.config.Telegram.AllowedUserIDs) != 1 || server.config.Telegram.AllowedUserIDs[0] != 2002 {
+		t.Fatalf("expected user id 2002 in allowlist, got %#v", server.config.Telegram.AllowedUserIDs)
+	}
+	if len(server.config.Telegram.AllowedChatTypes) != 2 || server.config.Telegram.AllowedChatTypes[1] != "group" {
+		t.Fatalf("expected group chat type to be added, got %#v", server.config.Telegram.AllowedChatTypes)
 	}
 }

@@ -91,6 +91,18 @@ func TestParseMessageSupportsStatusCommand(t *testing.T) {
 	}
 }
 
+func TestParseMessageSupportsHelpCommand(t *testing.T) {
+	t.Parallel()
+
+	result := ParseMessage("/help", 1)
+	if result.Kind != ParseResultKindHelp {
+		t.Fatalf("expected help result, got %q", result.Kind)
+	}
+	if result.ReplyText == "" {
+		t.Fatal("expected help reply text")
+	}
+}
+
 func TestParseMessageForChatAcceptsMentionedGroupCommand(t *testing.T) {
 	t.Parallel()
 
@@ -112,6 +124,15 @@ func TestParseMessageForChatAcceptsMentionedGroupStatusCommand(t *testing.T) {
 	}
 	if result.TaskID != "task-123" {
 		t.Fatalf("expected task id task-123, got %q", result.TaskID)
+	}
+}
+
+func TestParseMessageForChatAcceptsMentionedGroupHelpCommand(t *testing.T) {
+	t.Parallel()
+
+	result := ParseMessageForChat("/help@mybot", 1, "group", "mybot")
+	if result.Kind != ParseResultKindHelp {
+		t.Fatalf("expected help result, got %q", result.Kind)
 	}
 }
 
@@ -145,6 +166,32 @@ func TestParseMessageForChatAcceptsLeadingMentionStatus(t *testing.T) {
 	}
 	if result.TaskID != "task-123" {
 		t.Fatalf("expected task id task-123, got %q", result.TaskID)
+	}
+}
+
+func TestParseMessageForChatAcceptsLeadingMentionHelp(t *testing.T) {
+	t.Parallel()
+
+	result := ParseMessageForChat("@mybot /help", 1, "group", "mybot")
+	if result.Kind != ParseResultKindHelp {
+		t.Fatalf("expected help result for mentioned group command, got %q", result.Kind)
+	}
+}
+
+func TestParseMessageUsesChineseRejectText(t *testing.T) {
+	t.Parallel()
+
+	result := ParseMessage("/download", 1)
+	if result.Kind != ParseResultKindReject {
+		t.Fatalf("expected reject result, got %q", result.Kind)
+	}
+	if result.ReplyText != "用法：/download <url>" {
+		t.Fatalf("expected chinese usage text, got %q", result.ReplyText)
+	}
+
+	result = ParseMessage("https://a.example https://b.example", 1)
+	if result.ReplyText != "每条消息只支持一个 URL。" {
+		t.Fatalf("expected chinese multi-url reject text, got %q", result.ReplyText)
 	}
 }
 

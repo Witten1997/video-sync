@@ -31,25 +31,25 @@ func BuildStatusReply(in StatusReplyInput) StatusReply {
 
 	switch in.Stage {
 	case TelegramRequestStatusCompleted:
-		text = "Download completed."
+		text = "下载完成。"
 		if in.Title != "" {
-			text += "\nTitle: " + in.Title
+			text += "\n标题：" + in.Title
 		}
 		if in.RecordID > 0 {
-			text += "\nRecord ID: " + fmt.Sprint(in.RecordID)
+			text += "\n记录 ID：" + fmt.Sprint(in.RecordID)
 		}
 	case TelegramRequestStatusFailed:
-		text = "Download failed."
+		text = "下载失败。"
 		if in.ErrorMessage != "" {
-			text += "\nReason: " + in.ErrorMessage
+			text += "\n原因：" + in.ErrorMessage
 		}
 	default:
-		text = "Request accepted."
+		text = "已受理请求。"
 		if in.TaskID != "" {
-			text += "\nTask ID: " + in.TaskID
+			text += "\n任务 ID：" + in.TaskID
 		}
 		if in.Title != "" {
-			text += "\nTitle: " + in.Title
+			text += "\n标题：" + in.Title
 		}
 	}
 

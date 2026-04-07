@@ -33,23 +33,24 @@ type TelegramService interface {
 
 // Server API 服务器
 type Server struct {
-	config                *config.Config
-	configPath            string
-	db                    *gorm.DB
-	biliClient            *bilibili.Client
-	downloadMgr           *downloader.DownloadManager
-	urlDownloadService    service.URLDownloadSubmitter
-	telegramService       TelegramService
-	telegramClientFactory func(config.TelegramConfig, config.ProxyConfig) telegram.BotAPI
-	scheduler             *scheduler.Scheduler
-	router                *gin.Engine
-	httpServer            *http.Server
-	websocketHub          *WebSocketHub
-	imageProxyClient      *http.Client
-	frontendFS            fs.FS
-	checkVersion          CheckVersionInfo
-	checkVersionMu        sync.RWMutex
-	UpgradeSignal         chan string
+	config                       *config.Config
+	configPath                   string
+	db                           *gorm.DB
+	biliClient                   *bilibili.Client
+	downloadMgr                  *downloader.DownloadManager
+	urlDownloadService           service.URLDownloadSubmitter
+	telegramService              TelegramService
+	telegramAccessCandidateStore telegram.AccessCandidateStore
+	telegramClientFactory        func(config.TelegramConfig, config.ProxyConfig) telegram.BotAPI
+	scheduler                    *scheduler.Scheduler
+	router                       *gin.Engine
+	httpServer                   *http.Server
+	websocketHub                 *WebSocketHub
+	imageProxyClient             *http.Client
+	frontendFS                   fs.FS
+	checkVersion                 CheckVersionInfo
+	checkVersionMu               sync.RWMutex
+	UpgradeSignal                chan string
 }
 
 // NewServer 创建新的 API 服务器
@@ -66,12 +67,13 @@ func NewServer(cfg *config.Config, configPath string, db *gorm.DB, biliClient *b
 	}
 
 	s := &Server{
-		config:             cfg,
-		configPath:         configPath,
-		db:                 db,
-		biliClient:         biliClient,
-		downloadMgr:        downloadMgr,
-		urlDownloadService: urlDownloadService,
+		config:                       cfg,
+		configPath:                   configPath,
+		db:                           db,
+		biliClient:                   biliClient,
+		downloadMgr:                  downloadMgr,
+		urlDownloadService:           urlDownloadService,
+		telegramAccessCandidateStore: telegram.NewAccessCandidateStore(db),
 		telegramClientFactory: func(cfg config.TelegramConfig, proxyCfg config.ProxyConfig) telegram.BotAPI {
 			return telegram.NewClient(cfg.BotToken, cfg.PollTimeoutSeconds, proxyCfg)
 		},
@@ -184,6 +186,8 @@ func (s *Server) setupRouter() {
 		{
 			telegramAPI.GET("/status", s.handleTelegramStatus)
 			telegramAPI.GET("/requests", s.handleTelegramRequestLogs)
+			telegramAPI.GET("/access-candidates", s.handleTelegramAccessCandidates)
+			telegramAPI.POST("/access-candidates/:id/approve", s.handleTelegramApproveAccessCandidate)
 			telegramAPI.POST("/reconnect", s.handleTelegramReconnect)
 			telegramAPI.POST("/test-send", s.handleTelegramTestSend)
 		}

@@ -1,5 +1,12 @@
 import { http } from '@/utils/request'
-import type { PageResponse, TelegramReconnectResult, TelegramRequestLog, TelegramRuntimeStatus, TelegramTestSendResult } from '@/types'
+import type {
+  PageResponse,
+  TelegramAccessCandidate,
+  TelegramReconnectResult,
+  TelegramRequestLog,
+  TelegramRuntimeStatus,
+  TelegramTestSendResult
+} from '@/types'
 
 export const getTelegramStatus = () => {
   return http.get<TelegramRuntimeStatus>('/telegram/status')
@@ -24,4 +31,15 @@ export const sendTelegramTestMessage = (data: { chat_id: number; message?: strin
 
 export const reconnectTelegram = () => {
   return http.post<TelegramReconnectResult>('/telegram/reconnect')
+}
+
+export const getTelegramAccessCandidates = () => {
+  return http.get<TelegramAccessCandidate[]>('/telegram/access-candidates')
+}
+
+export const approveTelegramAccessCandidate = (
+  id: number,
+  data: { approve_chat_id: boolean; approve_user_id: boolean }
+) => {
+  return http.post(`/telegram/access-candidates/${id}/approve`, data)
 }
