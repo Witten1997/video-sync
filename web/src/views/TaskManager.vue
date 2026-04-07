@@ -438,16 +438,17 @@ let ws: WebSocket | null = null
 const stats = ref<SyncStats | null>(null)
 const statsLoading = ref(false)
 const statsPeriod = ref<'1d' | '7d' | '30d' | 'all'>('7d')
+type SyncLogFilters = PageParams & {
+  trigger_type?: 'auto' | 'manual' | 'all'
+  status?: 'running' | 'completed' | 'failed' | 'cancelled' | 'all'
+  sort_by?: string
+  sort_order?: 'asc' | 'desc'
+}
 
 // 日志列表
 const logs = ref<SyncLog[]>([])
 const logsLoading = ref(false)
-const filters = ref<PageParams & {
-  trigger_type?: string
-  status?: string
-  sort_by?: string
-  sort_order?: 'asc' | 'desc'
-}>({
+const filters = ref<SyncLogFilters>({
   trigger_type: 'all',
   status: 'all',
   sort_by: 'start_at',

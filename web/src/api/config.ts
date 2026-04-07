@@ -8,7 +8,11 @@ export const getConfig = () => {
 
 // 更新配置
 export const updateConfig = (data: Partial<Config>) => {
-  return http.post<Config>('/config', data)
+  return http.post<{
+    message: string
+    requires_restart: string[]
+    restart_needed: boolean
+  }>('/config', data)
 }
 
 // 验证配置

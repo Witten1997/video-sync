@@ -98,3 +98,19 @@ logging:
   max_size_mb: 100
   max_backups: 3
   max_age_days: 30
+
+telegram:
+  enabled: false
+  bot_token: ""
+  mode: "polling"
+  poll_timeout_seconds: 30
+  webhook_url: ""
+  webhook_secret: ""
+  allowed_chat_ids: []
+  allowed_user_ids: []
+  allowed_chat_types:
+    - "private"
+  max_urls_per_message: 1
+  notify_on_accept: true
+  notify_on_complete: true
+  notify_on_fail: true

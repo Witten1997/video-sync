@@ -1,40 +1,41 @@
 advanced:
     concurrent_limit:
-        video: 3
+        video: 4
         page: 2
     rate_limit:
-        duration_ms: 250
-        limit: 4
-    nfo_time_type: favtime
+        duration_ms: 300
+        limit: 3
+    nfo_time_type: pubtime
     ytdlp_extra_args: []
+    max_retry_count: 0
 bilibili:
     credential:
-        sessdata: ""
-        bili_jct: ""
+        sessdata: 0cb60d7d%2C1778329260%2Cad826%2Ab1CjDUijJUBp-wxF2GtgMAshljEvxrUOVYjavSzf6AaCe1B22BQRLi2sqL-4W1jGmzMD4SVlVyYWVWeEZkS3RpUHdJV2ZlWjh5NDl2ZFNGVmpHbmtrY3Y5TzZ6TUFhZm1vUDQzVkNLVEs1Rmd2LVoySzBrZWFLMllpR2x0cWZPRkVQR0tsVUJkSUZBIIEC
+        bili_jct: 11c0413ba4f8f2fea924dbd6e93e5771
         buvid3: ""
-        dedeuserid: ""
+        dedeuserid: "349545343"
         ac_time_value: ""
 danmaku:
     duration: 12
-    font_name: Microsoft YaHei
-    font_size: 38
-    width_ratio: 1.5
-    horizontal_gap: 30
-    lane_size: 0
+    font_name: 黑体
+    font_size: 30
+    width_ratio: 1.2
+    horizontal_gap: 20
+    lane_size: 32
     float_percentage: 0.5
     bottom_percentage: 0.25
-    opacity: 180
+    opacity: 150
     outline_width: 1.5
     time_offset: 0
     bold: false
-    custom_color: '#FFFFFF'
-    force_custom_color: false
+    custom_color: rgb(0, 255, 255)
+    force_custom_color: true
 database:
-    host: localhost
-    port: 5432
-    user: bili_sync
-    password: ""
-    dbname: bili_sync
+    host: nas2.pengit.top
+    port: 19101
+    user: postgres
+    password: pengge12
+    dbname: bili_download
     sslmode: disable
     max_open_conns: 25
     max_idle_conns: 5
@@ -43,8 +44,8 @@ download:
     skip_poster: false
     skip_video_nfo: false
     skip_upper: false
-    skip_danmaku: false
-    skip_subtitle: false
+    skip_danmaku: true
+    skip_subtitle: true
 logging:
     level: info
     file: ""
@@ -52,22 +53,43 @@ logging:
     max_backups: 3
     max_age_days: 30
 paths:
-    download_base: ./downloads
-    upper_path: ./metadata/people
+    download_base: D:\Downloads\waasd
+    url_download_path: \url
+    upper_path: /metadata/people12
+proxy:
+    enabled: true
+    url: http://127.0.0.1:20122
 quality:
-    max_resolution: 1080P+
+    max_resolution: 8K
     codec_priority:
         - AVC
         - HEVC
         - AV1
-    audio_quality: "30280"
+    audio_quality: "30251"
     cdn_sort: false
 server:
     bind_address: 0.0.0.0:8080
     auth_token: ""
+    jwt_secret: ""
 sync:
-    interval: 3600
+    interval: 60
     scan_only: false
+telegram:
+    enabled: true
+    bot_token: 8730247202:AAGkd9VfXyZVAfk5LF0QN2hYDoDI_PsQyfI
+    mode: polling
+    poll_timeout_seconds: 30
+    webhook_url: ""
+    webhook_secret: ""
+    allowed_chat_ids:
+        - 8101462337
+    allowed_user_ids: []
+    allowed_chat_types:
+        - private
+    max_urls_per_message: 1
+    notify_on_accept: true
+    notify_on_complete: true
+    notify_on_fail: true
 template:
     video_name: '{{title}}'
     page_name: '{{title}}'

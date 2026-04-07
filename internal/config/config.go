@@ -18,6 +18,7 @@ type Config struct {
 	Danmaku  DanmakuConfig  `yaml:"danmaku" mapstructure:"danmaku" json:"danmaku"`
 	Advanced AdvancedConfig `yaml:"advanced" mapstructure:"advanced" json:"advanced"`
 	Logging  LoggingConfig  `yaml:"logging" mapstructure:"logging" json:"logging"`
+	Telegram TelegramConfig `yaml:"telegram" mapstructure:"telegram" json:"telegram"`
 }
 
 // ServerConfig 服务器配置
@@ -137,6 +138,24 @@ type LoggingConfig struct {
 	MaxSizeMB  int    `yaml:"max_size_mb" mapstructure:"max_size_mb" json:"max_size_mb"`
 	MaxBackups int    `yaml:"max_backups" mapstructure:"max_backups" json:"max_backups"`
 	MaxAgeDays int    `yaml:"max_age_days" mapstructure:"max_age_days" json:"max_age_days"`
+}
+
+type TelegramConfig struct {
+	Enabled            bool     `yaml:"enabled" mapstructure:"enabled" json:"enabled"`
+	BotToken           string   `yaml:"bot_token" mapstructure:"bot_token" json:"-"`
+	BotTokenConfigured bool     `yaml:"-" mapstructure:"-" json:"bot_token_configured"`
+	Mode               string   `yaml:"mode" mapstructure:"mode" json:"mode"`
+	PollTimeoutSeconds int      `yaml:"poll_timeout_seconds" mapstructure:"poll_timeout_seconds" json:"poll_timeout_seconds"`
+	WebhookURL         string   `yaml:"webhook_url" mapstructure:"webhook_url" json:"webhook_url"`
+	WebhookSecret      string   `yaml:"webhook_secret" mapstructure:"webhook_secret" json:"-"`
+	WebhookConfigured  bool     `yaml:"-" mapstructure:"-" json:"webhook_secret_configured"`
+	AllowedChatIDs     []int64  `yaml:"allowed_chat_ids" mapstructure:"allowed_chat_ids" json:"allowed_chat_ids"`
+	AllowedUserIDs     []int64  `yaml:"allowed_user_ids" mapstructure:"allowed_user_ids" json:"allowed_user_ids"`
+	AllowedChatTypes   []string `yaml:"allowed_chat_types" mapstructure:"allowed_chat_types" json:"allowed_chat_types"`
+	MaxURLsPerMessage  int      `yaml:"max_urls_per_message" mapstructure:"max_urls_per_message" json:"max_urls_per_message"`
+	NotifyOnAccept     bool     `yaml:"notify_on_accept" mapstructure:"notify_on_accept" json:"notify_on_accept"`
+	NotifyOnComplete   bool     `yaml:"notify_on_complete" mapstructure:"notify_on_complete" json:"notify_on_complete"`
+	NotifyOnFail       bool     `yaml:"notify_on_fail" mapstructure:"notify_on_fail" json:"notify_on_fail"`
 }
 
 // GetConnMaxLifetime 返回连接最大生命周期

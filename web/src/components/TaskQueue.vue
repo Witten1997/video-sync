@@ -319,7 +319,7 @@ const handleCurrentChange = () => {
 }
 
 // 任务操作
-const handlePause = async (taskId: string) => {
+const handlePause = async (_taskId: string) => {
   try {
     // TODO: 实现暂停任务的 API
     // await pauseTask(taskId)
@@ -330,7 +330,7 @@ const handlePause = async (taskId: string) => {
   }
 }
 
-const handleResume = async (taskId: string) => {
+const handleResume = async (_taskId: string) => {
   try {
     // TODO: 实现继续任务的 API
     // await resumeTask(taskId)
@@ -341,7 +341,7 @@ const handleResume = async (taskId: string) => {
   }
 }
 
-const handleRetry = async (taskId: string) => {
+const handleRetry = async (_taskId: string) => {
   try {
     // TODO: 实现重试任务的 API
     // await retryTask(taskId)
@@ -352,7 +352,7 @@ const handleRetry = async (taskId: string) => {
   }
 }
 
-const handleCancel = async (taskId: string) => {
+const handleCancel = async (_taskId: string) => {
   try {
     await ElMessageBox.confirm('确定要取消此任务吗？', '提示', {
       confirmButtonText: '确定',
@@ -371,7 +371,7 @@ const handleCancel = async (taskId: string) => {
   }
 }
 
-const handleRemove = async (taskId: string) => {
+const handleRemove = async (_taskId: string) => {
   try {
     await ElMessageBox.confirm('确定要移除此任务吗？', '提示', {
       confirmButtonText: '确定',

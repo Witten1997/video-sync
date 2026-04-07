@@ -101,6 +101,8 @@ func Migrate(db *gorm.DB) error {
 		&models.Submission{},
 		&models.DownloadRecord{},
 		&models.User{},
+		&models.TelegramRuntimeState{},
+		&models.TelegramRequestLog{},
 	}
 
 	// 禁用外键约束迁移，避免级联关联表时触发约束错误

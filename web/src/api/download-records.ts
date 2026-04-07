@@ -6,6 +6,7 @@ export const getDownloadRecords = (params?: PageParams & {
   source_type?: string
   source_id?: string
   sync_log_id?: string
+  record_id?: string
   keyword?: string
 }) => {
   return http.get<PageResponse<DownloadRecord>>('/download-records', { params })

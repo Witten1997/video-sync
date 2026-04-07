@@ -9,12 +9,25 @@ import (
 )
 
 var (
-	globalConfig *Config
+	globalConfig     *Config
+	globalConfigPath string
 )
 
 // Load 加载配置文件
 func Load(configPath string) (*Config, error) {
 	v := viper.New()
+	v.SetDefault("telegram.enabled", false)
+	v.SetDefault("telegram.mode", "polling")
+	v.SetDefault("telegram.poll_timeout_seconds", 30)
+	v.SetDefault("telegram.webhook_url", "")
+	v.SetDefault("telegram.webhook_secret", "")
+	v.SetDefault("telegram.allowed_chat_ids", []int64{})
+	v.SetDefault("telegram.allowed_user_ids", []int64{})
+	v.SetDefault("telegram.allowed_chat_types", []string{"private"})
+	v.SetDefault("telegram.max_urls_per_message", 1)
+	v.SetDefault("telegram.notify_on_accept", true)
+	v.SetDefault("telegram.notify_on_complete", true)
+	v.SetDefault("telegram.notify_on_fail", true)
 
 	// 设置配置文件路径
 	if configPath != "" {
@@ -45,6 +58,7 @@ func Load(configPath string) (*Config, error) {
 	loadEnvOverrides(&cfg)
 
 	globalConfig = &cfg
+	globalConfigPath = resolveConfigFilePath(v.ConfigFileUsed(), configPath)
 	return &cfg, nil
 }
 
@@ -133,6 +147,21 @@ func createDefaultConfig(v *viper.Viper) (*Config, error) {
 			MaxBackups: 3,
 			MaxAgeDays: 30,
 		},
+		Telegram: TelegramConfig{
+			Enabled:            false,
+			BotToken:           "",
+			Mode:               "polling",
+			PollTimeoutSeconds: 30,
+			WebhookURL:         "",
+			WebhookSecret:      "",
+			AllowedChatIDs:     []int64{},
+			AllowedUserIDs:     []int64{},
+			AllowedChatTypes:   []string{"private"},
+			MaxURLsPerMessage:  1,
+			NotifyOnAccept:     true,
+			NotifyOnComplete:   true,
+			NotifyOnFail:       true,
+		},
 	}
 
 	// 创建配置目录
@@ -158,12 +187,14 @@ func createDefaultConfig(v *viper.Viper) (*Config, error) {
 	v.Set("danmaku", cfg.Danmaku)
 	v.Set("advanced", cfg.Advanced)
 	v.Set("logging", cfg.Logging)
+	v.Set("telegram", cfg.Telegram)
 
 	if err := v.WriteConfig(); err != nil {
 		return nil, fmt.Errorf("保存默认配置失败: %w", err)
 	}
 
 	globalConfig = cfg
+	globalConfigPath = resolveConfigFilePath(v.ConfigFileUsed(), configFile)
 	return cfg, nil
 }
 
@@ -208,6 +239,11 @@ func Get() *Config {
 	return globalConfig
 }
 
+// GetConfigPath returns the absolute path of the active config file.
+func GetConfigPath() string {
+	return globalConfigPath
+}
+
 // Save 保存配置到文件
 func Save(cfg *Config, configPath string) error {
 	v := viper.New()
@@ -235,6 +271,7 @@ func Save(cfg *Config, configPath string) error {
 	v.Set("danmaku", cfg.Danmaku)
 	v.Set("advanced", cfg.Advanced)
 	v.Set("logging", cfg.Logging)
+	v.Set("telegram", cfg.Telegram)
 
 	// 写入配置文件
 	if err := v.WriteConfig(); err != nil {
@@ -250,5 +287,22 @@ func Save(cfg *Config, configPath string) error {
 
 	// 更新全局配置
 	globalConfig = cfg
+	globalConfigPath = resolveConfigFilePath(v.ConfigFileUsed(), configPath)
 	return nil
+}
+
+func resolveConfigFilePath(usedPath string, fallback string) string {
+	candidate := usedPath
+	if candidate == "" {
+		candidate = fallback
+	}
+	if candidate == "" {
+		candidate = filepath.Join(".", "configs", "config.yaml")
+	}
+
+	absPath, err := filepath.Abs(candidate)
+	if err != nil {
+		return candidate
+	}
+	return absPath
 }

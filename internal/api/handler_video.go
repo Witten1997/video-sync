@@ -1,6 +1,7 @@
 package api
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -8,10 +9,9 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
-	"time"
 
 	"bili-download/internal/database/models"
-	"bili-download/internal/downloader"
+	"bili-download/internal/service"
 	"bili-download/internal/utils"
 
 	"github.com/gin-gonic/gin"
@@ -267,20 +267,6 @@ type DownloadByURLRequest struct {
 	URL string `json:"url" binding:"required"`
 }
 
-// isBilibiliURL 判断URL是否为B站链接
-func isBilibiliURL(rawURL string) bool {
-	// 纯BVID
-	if len(rawURL) == 12 && rawURL[:2] == "BV" {
-		return true
-	}
-	u, err := url.Parse(rawURL)
-	if err != nil {
-		return false
-	}
-	host := u.Hostname()
-	return host == "www.bilibili.com" || host == "bilibili.com" || host == "b23.tv" || host == "m.bilibili.com"
-}
-
 // handleDownloadByURL 通过视频链接下载视频（支持B站和其他平台）
 func (s *Server) handleDownloadByURL(c *gin.Context) {
 	var req DownloadByURLRequest
@@ -289,213 +275,30 @@ func (s *Server) handleDownloadByURL(c *gin.Context) {
 		return
 	}
 
-	if isBilibiliURL(req.URL) {
-		s.handleBilibiliDownloadByURL(c, req.URL)
-		return
-	}
-
-	// 非B站链接，使用yt-dlp下载
-	s.handleYtdlpDownloadByURL(c, req.URL)
-}
-
-// handleBilibiliDownloadByURL 通过B站视频链接下载视频
-func (s *Server) handleBilibiliDownloadByURL(c *gin.Context, rawURL string) {
-
-	// 1. 解析URL获取BVID
-	bvid, err := s.biliClient.ParseVideoURL(rawURL)
-	if err != nil {
-		respondValidationError(c, "无效的B站视频链接: "+err.Error())
-		return
-	}
-
-	// 2. 检查视频是否已存在
-	var existingVideo models.Video
-	err = s.db.Where("bvid = ?", bvid).Preload("Pages").First(&existingVideo).Error
-	if err == nil {
-		// 视频已存在，使用统一的下载方法
-		task, err := s.downloadMgr.PrepareAndAddVideoTask(&existingVideo, s.config.Paths.DownloadBase, 0, true)
-		if err != nil {
-			respondInternalError(c, err)
-			return
-		}
-
-		respondSuccess(c, gin.H{
-			"task_id": task.ID,
-			"video":   existingVideo,
-			"message": "视频已存在，下载任务已创建",
-		})
-		return
-	}
-
-	// 3. 获取视频详细信息
-	videoDetail, err := s.biliClient.GetVideoDetail(bvid)
-	if err != nil {
-		respondError(c, 500, "获取视频信息失败: "+err.Error())
-		return
-	}
-
-	// 4. 创建视频记录
-	video := models.Video{
-		BVid:           videoDetail.BVid,
-		Name:           videoDetail.Title,
-		Intro:          videoDetail.Desc,
-		Cover:          videoDetail.Pic,
-		UpperID:        videoDetail.Owner.Mid,
-		UpperName:      videoDetail.Owner.Name,
-		UpperFace:      videoDetail.Owner.Face,
-		Category:       videoDetail.Tid,
-		PubTime:        time.Unix(videoDetail.PubDate, 0),
-		FavTime:        time.Unix(videoDetail.PubDate, 0),
-		CTime:          time.Unix(videoDetail.CTime, 0),
-		SinglePage:     len(videoDetail.Pages) == 1,
-		Valid:          true,
-		ShouldDownload: true,
-	}
-
-	// 获取并保存标签
-	videoTags, err := s.biliClient.GetVideoTags(bvid)
-	if err == nil && len(videoTags) > 0 {
-		tags := make([]string, len(videoTags))
-		for i, tag := range videoTags {
-			tags[i] = tag.TagName
-		}
-		video.Tags = tags
-	}
-
-	// 5. 保存视频到数据库
-	if err := s.db.Create(&video).Error; err != nil {
-		respondInternalError(c, err)
-		return
-	}
-
-	// 6. 保存分P信息
-	for _, page := range videoDetail.Pages {
-		dbPage := models.Page{
-			VideoID:  video.ID,
-			CID:      page.CID,
-			PID:      page.Page,
-			Name:     page.Part,
-			Duration: page.Duration,
-			Width:    page.Dimension.Width,
-			Height:   page.Dimension.Height,
-			Image:    page.FirstFrame,
-		}
-
-		if err := s.db.Create(&dbPage).Error; err != nil {
-			respondInternalError(c, err)
-			return
-		}
-	}
-
-	// 7. 重新加载视频（包括分P）
-	if err := s.db.Preload("Pages").First(&video, video.ID).Error; err != nil {
-		respondInternalError(c, err)
-		return
-	}
-
-	// 8. 使用统一的下载方法创建任务
-	task, err := s.downloadMgr.PrepareAndAddVideoTask(&video, s.config.Paths.DownloadBase, 0, true)
-	if err != nil {
-		respondInternalError(c, err)
-		return
-	}
-
-	respondSuccess(c, gin.H{
-		"task_id": task.ID,
-		"video":   video,
-		"message": "视频信息已获取，下载任务已创建",
+	result, err := s.urlDownloadService.Submit(c.Request.Context(), service.URLDownloadRequest{
+		URL:       req.URL,
+		Channel:   "web",
+		Requester: "web",
 	})
-}
-
-// handleYtdlpDownloadByURL 通过yt-dlp下载非B站视频
-func (s *Server) handleYtdlpDownloadByURL(c *gin.Context, rawURL string) {
-	// 使用yt-dlp获取视频信息
-	ctx := c.Request.Context()
-	ytdlpDl := downloader.NewYtdlpDownloader(s.config, nil)
-	info, err := ytdlpDl.GetVideoInfo(ctx, rawURL, "")
 	if err != nil {
-		respondError(c, 500, "获取视频信息失败: "+err.Error())
-		return
-	}
-
-	// 提取视频信息
-	title, _ := info["title"].(string)
-	if title == "" {
-		title = "未知视频"
-	}
-	description, _ := info["description"].(string)
-	thumbnail, _ := info["thumbnail"].(string)
-	uploader, _ := info["uploader"].(string)
-	videoID, _ := info["id"].(string)
-	if videoID == "" {
-		videoID = fmt.Sprintf("ytdlp_%d", time.Now().UnixNano())
-	}
-
-	// 用平台前缀+ID作为bvid（确保唯一）
-	extractor, _ := info["extractor_key"].(string)
-	bvid := fmt.Sprintf("%s_%s", extractor, videoID)
-	if len(bvid) > 20 {
-		bvid = bvid[:20]
-	}
-
-	// 检查是否已存在
-	var existingVideo models.Video
-	if s.db.Where("bvid = ?", bvid).First(&existingVideo).Error == nil {
-		task, err := s.downloadMgr.PrepareAndAddYtdlpTask(&existingVideo, rawURL, s.config.Paths.URLDownloadBase())
-		if err != nil {
-			respondInternalError(c, err)
+		var downloadErr *service.URLDownloadError
+		if errors.As(err, &downloadErr) {
+			if downloadErr.Type == service.URLDownloadErrorTypeValidation {
+				respondValidationError(c, downloadErr.Error())
+				return
+			}
+			respondError(c, http.StatusInternalServerError, downloadErr.Error())
 			return
 		}
-		respondSuccess(c, gin.H{
-			"task_id": task.ID,
-			"video":   existingVideo,
-			"message": "视频已存在，下载任务已创建",
-		})
-		return
-	}
 
-	// 提取发布时间
-	pubTime := time.Now()
-	if ts, ok := info["timestamp"].(float64); ok && ts > 0 {
-		pubTime = time.Unix(int64(ts), 0)
-	} else if uploadDate, ok := info["upload_date"].(string); ok && len(uploadDate) == 8 {
-		if t, err := time.Parse("20060102", uploadDate); err == nil {
-			pubTime = t
-		}
-	}
-
-	// 创建视频记录
-	now := time.Now()
-	video := models.Video{
-		BVid:           bvid,
-		Name:           title,
-		Intro:          description,
-		Cover:          thumbnail,
-		UpperName:      uploader,
-		PubTime:        pubTime,
-		FavTime:        now,
-		CTime:          pubTime,
-		SinglePage:     true,
-		Valid:          true,
-		ShouldDownload: true,
-	}
-
-	if err := s.db.Create(&video).Error; err != nil {
-		respondInternalError(c, err)
-		return
-	}
-
-	// 创建yt-dlp下载任务
-	task, err := s.downloadMgr.PrepareAndAddYtdlpTask(&video, rawURL, s.config.Paths.URLDownloadBase())
-	if err != nil {
 		respondInternalError(c, err)
 		return
 	}
 
 	respondSuccess(c, gin.H{
-		"task_id": task.ID,
-		"video":   video,
-		"message": "视频信息已获取，下载任务已创建",
+		"task_id": result.TaskID,
+		"video":   result.APIVideo(),
+		"message": result.SuccessMessage(),
 	})
 }
 

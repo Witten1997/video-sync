@@ -27,6 +27,18 @@ export interface SystemStats {
     running: boolean
     stats: any
   }
+  videos?: {
+    total: number
+    downloaded: number
+    pending: number
+  }
+  tasks?: {
+    total: number
+    running: number
+    completed: number
+    failed: number
+    pending: number
+  }
   timestamp: number
 }
 

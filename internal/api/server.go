@@ -15,6 +15,8 @@ import (
 	"bili-download/internal/config"
 	"bili-download/internal/downloader"
 	"bili-download/internal/scheduler"
+	"bili-download/internal/service"
+	"bili-download/internal/telegram"
 	"bili-download/internal/utils"
 
 	"github.com/gin-contrib/cors"
@@ -22,26 +24,40 @@ import (
 	"gorm.io/gorm"
 )
 
+type TelegramService interface {
+	IsRunning() bool
+	Reconnect() error
+	ApplyConfig(*config.Config) (bool, error)
+	HandleWebhookUpdate(context.Context, telegram.Update) error
+}
+
 // Server API 服务器
 type Server struct {
-	config           *config.Config
-	configPath       string
-	db               *gorm.DB
-	biliClient       *bilibili.Client
-	downloadMgr      *downloader.DownloadManager
-	scheduler        *scheduler.Scheduler
-	router           *gin.Engine
-	httpServer       *http.Server
-	websocketHub     *WebSocketHub
-	imageProxyClient *http.Client
-	frontendFS       fs.FS
-	checkVersion     CheckVersionInfo
-	checkVersionMu   sync.RWMutex
-	UpgradeSignal    chan string
+	config                *config.Config
+	configPath            string
+	db                    *gorm.DB
+	biliClient            *bilibili.Client
+	downloadMgr           *downloader.DownloadManager
+	urlDownloadService    service.URLDownloadSubmitter
+	telegramService       TelegramService
+	telegramClientFactory func(config.TelegramConfig, config.ProxyConfig) telegram.BotAPI
+	scheduler             *scheduler.Scheduler
+	router                *gin.Engine
+	httpServer            *http.Server
+	websocketHub          *WebSocketHub
+	imageProxyClient      *http.Client
+	frontendFS            fs.FS
+	checkVersion          CheckVersionInfo
+	checkVersionMu        sync.RWMutex
+	UpgradeSignal         chan string
 }
 
 // NewServer 创建新的 API 服务器
-func NewServer(cfg *config.Config, configPath string, db *gorm.DB, biliClient *bilibili.Client, downloadMgr *downloader.DownloadManager, frontendFS fs.FS) (*Server, error) {
+func NewServer(cfg *config.Config, configPath string, db *gorm.DB, biliClient *bilibili.Client, downloadMgr *downloader.DownloadManager, urlDownloadService service.URLDownloadSubmitter, frontendFS fs.FS) (*Server, error) {
+	if urlDownloadService == nil {
+		return nil, fmt.Errorf("url download service is required")
+	}
+
 	// 设置 Gin 模式
 	if cfg.Logging.Level == "debug" {
 		gin.SetMode(gin.DebugMode)
@@ -50,11 +66,15 @@ func NewServer(cfg *config.Config, configPath string, db *gorm.DB, biliClient *b
 	}
 
 	s := &Server{
-		config:           cfg,
-		configPath:       configPath,
-		db:               db,
-		biliClient:       biliClient,
-		downloadMgr:      downloadMgr,
+		config:             cfg,
+		configPath:         configPath,
+		db:                 db,
+		biliClient:         biliClient,
+		downloadMgr:        downloadMgr,
+		urlDownloadService: urlDownloadService,
+		telegramClientFactory: func(cfg config.TelegramConfig, proxyCfg config.ProxyConfig) telegram.BotAPI {
+			return telegram.NewClient(cfg.BotToken, cfg.PollTimeoutSeconds, proxyCfg)
+		},
 		websocketHub:     NewWebSocketHub(),
 		frontendFS:       frontendFS,
 		UpgradeSignal:    make(chan string, 1),
@@ -75,6 +95,20 @@ func NewServer(cfg *config.Config, configPath string, db *gorm.DB, biliClient *b
 
 func (s *Server) refreshHTTPClients() {
 	s.imageProxyClient = utils.NewHTTPClient(s.config.Proxy, 10*time.Second, 20, 10)
+}
+
+func (s *Server) AttachTelegramService(botService TelegramService) {
+	s.telegramService = botService
+}
+
+func (s *Server) newTelegramClient() telegram.BotAPI {
+	if s.config == nil {
+		return nil
+	}
+	if s.telegramClientFactory != nil {
+		return s.telegramClientFactory(s.config.Telegram, s.config.Proxy)
+	}
+	return telegram.NewClient(s.config.Telegram.BotToken, s.config.Telegram.PollTimeoutSeconds, s.config.Proxy)
 }
 
 // setupRouter 设置路由
@@ -144,6 +178,14 @@ func (s *Server) setupRouter() {
 			config.POST("", s.handleUpdateConfig)
 			config.POST("/validate", s.handleValidateConfig)
 			config.POST("/validate-credential", s.handleValidateBilibiliCredential)
+		}
+
+		telegramAPI := api.Group("/telegram")
+		{
+			telegramAPI.GET("/status", s.handleTelegramStatus)
+			telegramAPI.GET("/requests", s.handleTelegramRequestLogs)
+			telegramAPI.POST("/reconnect", s.handleTelegramReconnect)
+			telegramAPI.POST("/test-send", s.handleTelegramTestSend)
 		}
 
 		// 视频源管理
@@ -231,6 +273,8 @@ func (s *Server) setupRouter() {
 		// 调度器路由
 		s.registerSchedulerRoutes(api)
 	}
+
+	router.POST("/telegram/webhook", s.handleTelegramWebhook)
 
 	// 静态文件服务（下载文件）
 	downloadPath := s.config.Paths.DownloadBase

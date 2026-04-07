@@ -38,6 +38,7 @@ func (s *Server) handleListDownloadRecords(c *gin.Context) {
 	sourceType := c.Query("source_type")
 	sourceID := c.Query("source_id")
 	syncLogID := c.Query("sync_log_id")
+	recordID := c.Query("record_id")
 	keyword := c.Query("keyword")
 
 	query := s.db.Model(&models.DownloadRecord{}).Preload("Video")
@@ -53,6 +54,9 @@ func (s *Server) handleListDownloadRecords(c *gin.Context) {
 	}
 	if syncLogID != "" {
 		query = query.Where("download_records.sync_log_id = ?", syncLogID)
+	}
+	if recordID != "" {
+		query = query.Where("download_records.id = ?", recordID)
 	}
 	if keyword != "" {
 		query = query.Joins("JOIN video ON video.id = download_records.video_id").

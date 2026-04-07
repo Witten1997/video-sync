@@ -3,6 +3,9 @@ package api
 import (
 	"encoding/json"
 	"fmt"
+	"reflect"
+	"strconv"
+	"strings"
 	"time"
 
 	"bili-download/internal/config"
@@ -13,7 +16,12 @@ import (
 // handleGetConfig 获取配置
 func (s *Server) handleGetConfig(c *gin.Context) {
 	// 返回当前配置
-	respondSuccess(c, s.config)
+	cfg := *s.config
+	cfg.Telegram.BotTokenConfigured = strings.TrimSpace(cfg.Telegram.BotToken) != ""
+	cfg.Telegram.WebhookConfigured = strings.TrimSpace(cfg.Telegram.WebhookSecret) != ""
+	cfg.Telegram.BotToken = ""
+	cfg.Telegram.WebhookSecret = ""
+	respondSuccess(c, &cfg)
 }
 
 // handleUpdateConfig 更新配置
@@ -69,6 +77,10 @@ func (s *Server) handleUpdateConfig(c *gin.Context) {
 
 	// 检查 B站认证信息是否发生变化
 	credentialChanged := s.config.Bilibili.Credential != newConfig.Bilibili.Credential
+	databaseChanged := s.config.Database != newConfig.Database
+	serverBindChanged := s.config.Server.BindAddress != newConfig.Server.BindAddress
+	telegramChanged := !reflect.DeepEqual(s.config.Telegram, newConfig.Telegram)
+	telegramRestartRequired := false
 
 	// 更新服务器内存中的配置
 	s.config = &newConfig
@@ -87,6 +99,19 @@ func (s *Server) handleUpdateConfig(c *gin.Context) {
 	// 如果 B站认证信息发生变化，更新 biliClient 的 credential
 	if credentialChanged || !credentialChanged {
 		s.biliClient.UpdateConfig(&newConfig)
+	}
+
+	if telegramChanged {
+		if s.telegramService == nil {
+			telegramRestartRequired = true
+		} else {
+			restartRequired, err := s.telegramService.ApplyConfig(&newConfig)
+			if err != nil {
+				telegramRestartRequired = true
+			} else {
+				telegramRestartRequired = restartRequired
+			}
+		}
 	}
 
 	// 通过 WebSocket 推送配置更新事件
@@ -108,13 +133,16 @@ func (s *Server) handleUpdateConfig(c *gin.Context) {
 	requiresRestart := []string{}
 
 	// 数据库配置更改需要重启
-	if s.config.Database != newConfig.Database {
+	if databaseChanged {
 		requiresRestart = append(requiresRestart, "database")
 	}
 
 	// 服务器绑定地址更改需要重启
-	if s.config.Server.BindAddress != newConfig.Server.BindAddress {
+	if serverBindChanged {
 		requiresRestart = append(requiresRestart, "server.bind_address")
+	}
+	if telegramChanged && telegramRestartRequired {
+		requiresRestart = append(requiresRestart, "telegram")
 	}
 
 	respondSuccess(c, gin.H{
@@ -404,6 +432,117 @@ func mergeConfigFromMap(cfg *config.Config, configMap map[string]interface{}) {
 			}
 		}
 	}
+
+	if telegramMap, ok := configMap["telegram"].(map[string]interface{}); ok {
+		if enabled, exists := telegramMap["enabled"]; exists {
+			if v, ok := enabled.(bool); ok {
+				cfg.Telegram.Enabled = v
+			}
+		}
+		if botToken, exists := telegramMap["bot_token"]; exists {
+			if v, ok := botToken.(string); ok && v != "" {
+				cfg.Telegram.BotToken = v
+			}
+		}
+		if mode, exists := telegramMap["mode"]; exists {
+			if v, ok := mode.(string); ok {
+				cfg.Telegram.Mode = v
+			}
+		}
+		if webhookURL, exists := telegramMap["webhook_url"]; exists {
+			if v, ok := webhookURL.(string); ok {
+				cfg.Telegram.WebhookURL = v
+			}
+		}
+		if webhookSecret, exists := telegramMap["webhook_secret"]; exists {
+			if v, ok := webhookSecret.(string); ok && v != "" {
+				cfg.Telegram.WebhookSecret = v
+			}
+		}
+		if pollTimeout, exists := telegramMap["poll_timeout_seconds"]; exists {
+			if v, ok := pollTimeout.(float64); ok {
+				cfg.Telegram.PollTimeoutSeconds = int(v)
+			}
+		}
+		if allowedChatIDs, exists := telegramMap["allowed_chat_ids"]; exists {
+			if ids, ok := toInt64Slice(allowedChatIDs); ok {
+				cfg.Telegram.AllowedChatIDs = ids
+			}
+		}
+		if allowedUserIDs, exists := telegramMap["allowed_user_ids"]; exists {
+			if ids, ok := toInt64Slice(allowedUserIDs); ok {
+				cfg.Telegram.AllowedUserIDs = ids
+			}
+		}
+		if allowedChatTypes, exists := telegramMap["allowed_chat_types"]; exists {
+			if values, ok := toStringSlice(allowedChatTypes); ok {
+				cfg.Telegram.AllowedChatTypes = values
+			}
+		}
+		if maxURLs, exists := telegramMap["max_urls_per_message"]; exists {
+			if v, ok := maxURLs.(float64); ok {
+				cfg.Telegram.MaxURLsPerMessage = int(v)
+			}
+		}
+		if notifyOnAccept, exists := telegramMap["notify_on_accept"]; exists {
+			if v, ok := notifyOnAccept.(bool); ok {
+				cfg.Telegram.NotifyOnAccept = v
+			}
+		}
+		if notifyOnComplete, exists := telegramMap["notify_on_complete"]; exists {
+			if v, ok := notifyOnComplete.(bool); ok {
+				cfg.Telegram.NotifyOnComplete = v
+			}
+		}
+		if notifyOnFail, exists := telegramMap["notify_on_fail"]; exists {
+			if v, ok := notifyOnFail.(bool); ok {
+				cfg.Telegram.NotifyOnFail = v
+			}
+		}
+	}
+}
+
+func toInt64Slice(value interface{}) ([]int64, bool) {
+	items, ok := value.([]interface{})
+	if !ok {
+		return nil, false
+	}
+
+	result := make([]int64, 0, len(items))
+	for _, item := range items {
+		switch v := item.(type) {
+		case float64:
+			result = append(result, int64(v))
+		case string:
+			parsed, err := strconv.ParseInt(v, 10, 64)
+			if err != nil {
+				return nil, false
+			}
+			result = append(result, parsed)
+		default:
+			return nil, false
+		}
+	}
+
+	return result, true
+}
+
+func toStringSlice(value interface{}) ([]string, bool) {
+	items, ok := value.([]interface{})
+	if !ok {
+		return nil, false
+	}
+
+	result := make([]string, 0, len(items))
+	for _, item := range items {
+		text, ok := item.(string)
+		if !ok {
+			return nil, false
+		}
+		result = append(result, text)
+	}
+
+	return result, true
 }
 
 // ConfigValidationRequest 配置验证请求

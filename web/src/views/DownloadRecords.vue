@@ -175,7 +175,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted, onUnmounted } from 'vue'
+import { ref, reactive, onMounted, onUnmounted, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Link } from '@element-plus/icons-vue'
 import { getDownloadRecords, getDownloadRecord, retryDownloadRecord, deleteDownloadRecord, batchDeleteDownloadRecords, batchRetryDownloadRecords } from '@/api/download-records'
@@ -184,12 +184,14 @@ import SegmentedProgress from '@/components/SegmentedProgress.vue'
 import type { DownloadRecord } from '@/types'
 import { useAuthStore } from '@/stores/auth'
 import { getProxiedImageUrl } from '@/utils/image'
+import { useRoute } from 'vue-router'
 
 const records = ref<DownloadRecord[]>([])
 const loading = ref(false)
 const selectedIds = ref<number[]>([])
 const selectedRows = ref<DownloadRecord[]>([])
-const filters = reactive({ status: '', source_type: '', keyword: '' })
+const route = useRoute()
+const filters = reactive({ status: '', source_type: '', keyword: '', record_id: '' })
 const pagination = reactive({ page: 1, pageSize: 20, total: 0 })
 
 // URL下载对话框
@@ -241,7 +243,7 @@ const flushUpdates = () => {
       if (record?.file_details?.files) {
         const file = record.file_details.files.find(f => f.name === update.file_name)
         if (file) {
-          file.status = update.status
+          file.status = update.status as typeof file.status
           file.progress = update.progress
           file.size = update.size
         }
@@ -258,7 +260,7 @@ const flushUpdates = () => {
     for (const [record_id, status] of pendingStatusUpdates) {
       const record = records.value.find(r => r.id === record_id)
       if (record) {
-        record.status = status
+        record.status = status as DownloadRecord['status']
         if (status === 'completed') {
           record.file_details.files.forEach(f => {
             if (f.status !== 'failed' && f.status !== 'skipped') {
@@ -277,6 +279,11 @@ const scheduleFlush = () => {
   if (rafId === null) {
     rafId = requestAnimationFrame(flushUpdates)
   }
+}
+
+const applyRouteFilters = () => {
+  const recordID = route.query.record_id
+  filters.record_id = typeof recordID === 'string' ? recordID : ''
 }
 
 const loadRecords = async () => {
@@ -423,8 +430,15 @@ const connectWebSocket = () => {
 }
 
 onMounted(() => {
+  applyRouteFilters()
   loadRecords().then(startPollIfNeeded)
   connectWebSocket()
+})
+
+watch(() => route.query.record_id, () => {
+  applyRouteFilters()
+  pagination.page = 1
+  loadRecords().then(startPollIfNeeded)
 })
 
 onUnmounted(() => {

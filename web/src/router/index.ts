@@ -68,6 +68,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '配置', icon: 'Setting', materialIcon: 'settings' }
       },
       {
+        path: 'telegram/requests',
+        name: 'TelegramRequests',
+        component: () => import('@/views/TelegramRequests.vue'),
+        meta: { title: 'Telegram 请求日志', icon: 'ChatDotSquare', materialIcon: 'send' }
+      },
+      {
         path: 'maintenance',
         name: 'Maintenance',
         component: () => import('@/views/Maintenance.vue'),

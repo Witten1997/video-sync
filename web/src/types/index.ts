@@ -16,8 +16,10 @@ export interface VideoSource {
   name: string
   enabled: boolean
   path: string
+  cid?: number
   last_scan_at?: string
   created_at: string
+  video_count?: number
   // 特定类型的字段
   f_id?: string // 收藏夹ID
   mid?: string // UP主ID/合集UP主ID
@@ -39,6 +41,7 @@ export interface Video {
   upper_id: number
   upper_name: string
   upper_face: string
+  view_count: number
   category: number
   pubtime: string
   favtime: string
@@ -142,6 +145,8 @@ export interface Config {
     outline_width: number
     time_offset: number
     bold: boolean
+    custom_color: string
+    force_custom_color: boolean
   }
   advanced: {
     concurrent_limit: {
@@ -163,6 +168,63 @@ export interface Config {
     max_backups: number
     max_age_days: number
   }
+  telegram: {
+    enabled: boolean
+    bot_token: string
+    bot_token_configured: boolean
+    mode: string
+    poll_timeout_seconds: number
+    webhook_url: string
+    webhook_secret: string
+    webhook_secret_configured: boolean
+    allowed_chat_ids: number[]
+    allowed_user_ids: number[]
+    allowed_chat_types: string[]
+    max_urls_per_message: number
+    notify_on_accept: boolean
+    notify_on_complete: boolean
+    notify_on_fail: boolean
+  }
+}
+
+export interface TelegramRuntimeStatus {
+  enabled: boolean
+  running: boolean
+  mode: string
+  bot_name: string
+  last_update_id: number
+  last_poll_at: string | null
+  last_error: string
+  last_error_at: string | null
+}
+
+export interface TelegramRequestLog {
+  id: number
+  update_id: number
+  chat_id: number
+  message_id: number
+  user_id: number
+  raw_text: string
+  raw_url: string
+  url_hash: string
+  status: string
+  video_id: number | null
+  record_id: number | null
+  task_id: string
+  reply_message_id: number | null
+  error_message: string
+  created_at: string
+  updated_at: string
+}
+
+export interface TelegramTestSendResult {
+  chat_id: number
+  message_id: number
+  text: string
+}
+
+export interface TelegramReconnectResult {
+  message: string
 }
 
 // 仪表盘统计数据
