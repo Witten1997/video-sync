@@ -321,7 +321,6 @@ telegram:
 - `internal/config/config.go`
 - `internal/config/validator.go`
 - `configs/config.example.yaml`
-- `cmd/server/configs/config.yaml`
 
 校验规则建议：
 

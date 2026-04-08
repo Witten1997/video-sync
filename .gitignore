@@ -25,6 +25,7 @@ dist/
 configs/config.yaml
 configs/*.yaml
 !configs/config.example.yaml
+cmd/server/configs/config.yaml
 
 # Logs
 *.log

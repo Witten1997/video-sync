@@ -44,14 +44,82 @@ func (f *fakeConfigTelegramService) HandleWebhookUpdate(context.Context, telegra
 func loadConfigForUpdateHandlerTest(t *testing.T) (*config.Config, string) {
 	t.Helper()
 
-	sourcePath := filepath.Join("..", "..", "cmd", "server", "configs", "config.yaml")
-	raw, err := os.ReadFile(sourcePath)
-	if err != nil {
-		t.Fatalf("read source config: %v", err)
-	}
-
 	tempPath := filepath.Join(t.TempDir(), "config.yaml")
-	if err := os.WriteFile(tempPath, raw, 0o600); err != nil {
+	const raw = `server:
+  bind_address: "0.0.0.0:8080"
+database:
+  host: "localhost"
+  port: 5432
+  user: "bili_sync"
+  password: ""
+  dbname: "bili_sync"
+  sslmode: "disable"
+  max_open_conns: 25
+  max_idle_conns: 5
+  conn_max_lifetime: 300
+proxy:
+  enabled: false
+  url: ""
+sync:
+  interval: 3600
+  scan_only: false
+paths:
+  download_base: "./downloads"
+  url_download_path: ""
+  upper_path: "./metadata/people"
+template:
+  video_name: "{{title}}"
+  page_name: "{{title}}"
+  time_format: "%Y-%m-%d"
+quality:
+  max_resolution: "1080P+"
+  codec_priority:
+    - "AVC"
+    - "HEVC"
+    - "AV1"
+  audio_quality: "30280"
+  cdn_sort: false
+download:
+  skip_poster: false
+  skip_video_nfo: false
+  skip_upper: false
+  skip_danmaku: false
+  skip_subtitle: false
+danmaku:
+  duration: 12
+  font_name: "Microsoft YaHei"
+  font_size: 38
+  width_ratio: 1.5
+  horizontal_gap: 30
+  lane_size: 0
+  float_percentage: 0.5
+  bottom_percentage: 0.25
+  opacity: 180
+  outline_width: 1.5
+  time_offset: 0
+  bold: false
+  custom_color: "#FFFFFF"
+  force_custom_color: false
+advanced:
+  concurrent_limit:
+    video: 3
+    page: 2
+  rate_limit:
+    duration_ms: 250
+    limit: 4
+  nfo_time_type: "favtime"
+  ytdlp_extra_args: []
+  max_retry_count: 3
+logging:
+  level: "info"
+  file: ""
+  max_size_mb: 100
+  max_backups: 3
+  max_age_days: 30
+telegram:
+  enabled: false
+`
+	if err := os.WriteFile(tempPath, []byte(raw), 0o600); err != nil {
 		t.Fatalf("write temp config: %v", err)
 	}
 
