@@ -65,13 +65,25 @@ const routes: RouteRecordRaw[] = [
         path: 'config',
         name: 'Config',
         component: () => import('@/views/Config.vue'),
-        meta: { title: '配置', icon: 'Setting', materialIcon: 'settings' }
+        meta: { title: '系统配置', icon: 'Setting', materialIcon: 'settings' }
       },
       {
-        path: 'telegram/requests',
+        path: 'integrations',
+        name: 'Integrations',
+        component: () => import('@/views/integrations/Index.vue'),
+        meta: { title: '平台集成', icon: 'Connection', materialIcon: 'hub' }
+      },
+      {
+        path: 'integrations/telegram',
+        name: 'TelegramIntegration',
+        component: () => import('@/views/integrations/Telegram.vue'),
+        meta: { title: 'Telegram', hidden: true }
+      },
+      {
+        path: 'integrations/telegram/requests',
         name: 'TelegramRequests',
-        component: () => import('@/views/TelegramRequests.vue'),
-        meta: { title: 'Telegram 请求日志', icon: 'ChatDotSquare', materialIcon: 'send' }
+        component: () => import('@/views/integrations/TelegramRequests.vue'),
+        meta: { title: 'Telegram 请求日志', hidden: true }
       },
       {
         path: 'maintenance',
@@ -83,7 +95,7 @@ const routes: RouteRecordRaw[] = [
         path: 'logs',
         name: 'Logs',
         component: () => import('@/views/Logs.vue'),
-        meta: { title: '日志', icon: 'Document', materialIcon: 'terminal' }
+        meta: { title: '系统日志', icon: 'Document', materialIcon: 'terminal' }
       }
     ]
   }

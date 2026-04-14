@@ -1,9 +1,14 @@
 <template>
   <div class="telegram-requests">
     <div class="page-header">
-      <div>
-        <h2>Telegram 请求日志</h2>
-        <p>查看最近的 Telegram 提交请求，以及它们关联的下载记录。</p>
+      <div class="page-header-left">
+        <el-button text @click="router.push({ name: 'TelegramIntegration' })">
+          <span class="material-icons-round" style="font-size: 20px">arrow_back</span>
+        </el-button>
+        <div>
+          <h2>Telegram 请求日志</h2>
+          <p>查看最近的 Telegram 提交请求，以及它们关联的下载记录。</p>
+        </div>
       </div>
       <el-button type="primary" @click="loadRows">刷新</el-button>
     </div>
@@ -211,6 +216,12 @@ onMounted(loadRows)
   justify-content: space-between;
   gap: 16px;
   margin-bottom: 24px;
+}
+
+.page-header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .page-header h2 {
