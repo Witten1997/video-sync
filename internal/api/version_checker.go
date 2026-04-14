@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -75,7 +76,7 @@ func (s *Server) doVersionCheck() {
 	}
 
 	info := CheckVersionInfo{
-		HasUpdate:   latestVer != version.Version,
+		HasUpdate:   isNewerVersion(version.Version, latestVer),
 		NewVersion:  latestVer,
 		DownloadURL: latest.HTMLURL,
 		Changelog:   latest.Body,
@@ -97,4 +98,22 @@ func (s *Server) getCheckVersion() CheckVersionInfo {
 	s.checkVersionMu.RLock()
 	defer s.checkVersionMu.RUnlock()
 	return s.checkVersion
+}
+
+// isNewerVersion 判断 remote 是否比 current 更新（语义化版本比较）
+func isNewerVersion(current, remote string) bool {
+	var c1, c2, c3, r1, r2, r3 int
+	if _, err := fmt.Sscanf(current, "%d.%d.%d", &c1, &c2, &c3); err != nil {
+		return false
+	}
+	if _, err := fmt.Sscanf(remote, "%d.%d.%d", &r1, &r2, &r3); err != nil {
+		return false
+	}
+	if r1 != c1 {
+		return r1 > c1
+	}
+	if r2 != c2 {
+		return r2 > c2
+	}
+	return r3 > c3
 }

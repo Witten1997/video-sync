@@ -407,7 +407,7 @@
           </el-form>
         </el-tab-pane>
 
-        <el-tab-pane label="版本信息" name="version">
+        <el-tab-pane label="在线升级" name="version">
           <el-form label-width="180px">
             <el-divider content-position="left">程序版本</el-divider>
 
@@ -468,7 +468,7 @@
         </el-tab-pane>
       </el-tabs>
 
-      <div class="actions">
+      <div class="actions" v-if="!['tools', 'version'].includes(activeTab)">
         <el-button @click="loadData">重置</el-button>
         <el-button type="primary" @click="handleSave">保存配置</el-button>
       </div>
