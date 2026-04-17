@@ -1,3 +1,5 @@
+# 打包命令为 powershell scripts/build.ps1 0.1.2
+
 $ErrorActionPreference = "Stop"
 
 $Version = if ($args[0]) { $args[0] } else {
@@ -11,16 +13,13 @@ $OutputDir = "dist"
 
 Write-Host "=== Building video-sync $Version ==="
 
-# 1. 构建前端（已有dist则跳过）
-if (!(Test-Path "web/dist")) {
-    Write-Host "--- Building frontend ---"
-    Push-Location web
-    npm ci
-    npx vite build
-    Pop-Location
-} else {
-    Write-Host "--- Frontend dist exists, skipping ---"
-}
+# 1. 构建前端
+if (Test-Path "web/dist") { Remove-Item -Recurse -Force "web/dist" }
+Write-Host "--- Building frontend ---"
+Push-Location web
+if (!(Test-Path "node_modules")) { npm ci }
+npx vite build
+Pop-Location
 
 # 2. 清理输出目录
 if (Test-Path $OutputDir) { Remove-Item -Recurse -Force $OutputDir }

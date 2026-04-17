@@ -580,9 +580,12 @@ const loadSources = async () => {
 }
 
 const handleViewModeChange = (mode: string) => {
+  selectedSource.value = null
+  currentPage.value = 1
   if (mode === 'source') {
-    selectedSource.value = null
     loadSources()
+  } else {
+    loadData()
   }
 }
 
