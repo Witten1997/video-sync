@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"os"
 	"path/filepath"
 	"strings"
@@ -25,6 +26,13 @@ type backfillQualityQueryParts struct {
 	whereClause  string
 }
 
+type pageWithVideo struct {
+	models.Page
+	VideoName  string
+	SinglePage bool
+	VideoPath  string
+}
+
 func buildBackfillQualityQueryParts() backfillQualityQueryParts {
 	pageTable := (models.Page{}).TableName()
 	videoTable := (models.Video{}).TableName()
@@ -36,6 +44,94 @@ func buildBackfillQualityQueryParts() backfillQualityQueryParts {
 		joinClause:   fmt.Sprintf("JOIN %s ON %s.id = %s.video_id", videoTable, videoTable, pageTable),
 		whereClause:  fmt.Sprintf("%s.download_status = ? AND (%s.quality = 0 OR %s.width = 0)", pageTable, pageTable, pageTable),
 	}
+}
+
+func (s *Server) queryPagesForMetadataBackfill(whereClause string, args ...interface{}) ([]pageWithVideo, error) {
+	queryParts := buildBackfillQualityQueryParts()
+
+	var rows []pageWithVideo
+	err := s.db.Table(queryParts.pageTable).
+		Select(queryParts.selectClause).
+		Joins(queryParts.joinClause).
+		Where(whereClause, args...).
+		Scan(&rows).Error
+
+	return rows, err
+}
+
+func (s *Server) backfillPageMetadata(rows []pageWithVideo, taskName string) {
+	videoExts := []string{".mp4", ".mkv", ".webm", ".flv", ".avi", ".m4v"}
+	delayRand := rand.New(rand.NewSource(time.Now().UnixNano()))
+	updated, skipped, failed := 0, 0, 0
+
+	for _, r := range rows {
+		if r.VideoPath == "" {
+			skipped++
+			continue
+		}
+		outputDir := r.VideoPath
+		if !filepath.IsAbs(outputDir) {
+			outputDir = filepath.Join(s.config.Paths.DownloadBase, outputDir)
+		}
+
+		var baseName string
+		if r.SinglePage {
+			baseName = utils.Filenamify(r.VideoName)
+		} else {
+			baseName = fmt.Sprintf("%s-%s", utils.Filenamify(r.VideoName), utils.Filenamify(r.Page.Name))
+		}
+
+		filePath := ""
+		entries, _ := os.ReadDir(outputDir)
+		for _, entry := range entries {
+			if entry.IsDir() {
+				continue
+			}
+			name := entry.Name()
+			if !strings.HasPrefix(name, baseName) {
+				continue
+			}
+			lower := strings.ToLower(name)
+			for _, ext := range videoExts {
+				if strings.HasSuffix(lower, ext) {
+					filePath = filepath.Join(outputDir, name)
+					break
+				}
+			}
+			if filePath != "" {
+				break
+			}
+		}
+		if filePath == "" {
+			utils.Warn("%s: 未找到文件 %s/%s", taskName, outputDir, baseName)
+			skipped++
+			continue
+		}
+
+		probe, err := downloader.ProbeVideo(context.Background(), filePath)
+		time.Sleep(500*time.Millisecond + time.Duration(delayRand.Int63n(int64(500*time.Millisecond)+1)))
+		if err != nil {
+			utils.Warn("%s: ffprobe 失败 %s: %v", taskName, filePath, err)
+			failed++
+			continue
+		}
+
+		updates := map[string]interface{}{
+			"width":       probe.Width,
+			"height":      probe.Height,
+			"frame_rate":  probe.FrameRate,
+			"quality":     models.CalcQuality(probe.Height, probe.FrameRate),
+			"orientation": models.CalcOrientation(probe.Width, probe.Height),
+		}
+		if err := s.db.Model(&models.Page{}).Where("id = ?", r.Page.ID).Updates(updates).Error; err != nil {
+			utils.Warn("%s: 更新失败 page=%d: %v", taskName, r.Page.ID, err)
+			failed++
+			continue
+		}
+		updated++
+	}
+
+	utils.Info("%s完成: 共%d个，成功 %d 个，跳过 %d 个，失败 %d 个", taskName, len(rows), updated, skipped, failed)
 }
 
 // refreshViewCountRunning 防止重复执行
@@ -165,6 +261,7 @@ func (s *Server) doRefreshUpperFaces() {
 
 // backfillQualityRunning 防止重复执行
 var backfillQualityRunning atomic.Bool
+var reparsePageMetadataRunning atomic.Bool
 
 // handleBackfillQuality 扫描已下载文件回填 width/height/frame_rate/quality/orientation
 func (s *Server) handleBackfillQuality(c *gin.Context) {
@@ -276,6 +373,46 @@ func (s *Server) doBackfillQuality() {
 	}
 
 	utils.Info("回填画质完成: 共 %d 个，成功 %d 个，跳过 %d 个，失败 %d 个", len(rows), updated, skipped, failed)
+}
+
+// handleReparsePageMetadata 重新解析画质/帧率/方向为空的已下载分P
+func (s *Server) handleReparsePageMetadata(c *gin.Context) {
+	if !reparsePageMetadataRunning.CompareAndSwap(false, true) {
+		respondError(c, 409, "重新解析视频信息任务正在执行中，请稍后再试")
+		return
+	}
+
+	var count int64
+	s.db.Model(&models.Page{}).
+		Where("download_status = ? AND (quality = 0 OR quality IS NULL) AND (frame_rate = 0 OR frame_rate IS NULL) AND (orientation = 0 OR orientation IS NULL)", 1).
+		Count(&count)
+
+	go s.doReparsePageMetadata()
+
+	respondSuccess(c, gin.H{
+		"total":   count,
+		"message": fmt.Sprintf("已开始重新解析 %d 个分P的视频信息，请查看日志了解进度", count),
+	})
+}
+
+func (s *Server) doReparsePageMetadata() {
+	defer reparsePageMetadataRunning.Store(false)
+
+	queryParts := buildBackfillQualityQueryParts()
+	whereClause := fmt.Sprintf("%s.download_status = ? AND (%s.quality = 0 OR %s.quality IS NULL) AND (%s.frame_rate = 0 OR %s.frame_rate IS NULL) AND (%s.orientation = 0 OR %s.orientation IS NULL)",
+		queryParts.pageTable,
+		queryParts.pageTable, queryParts.pageTable,
+		queryParts.pageTable, queryParts.pageTable,
+		queryParts.pageTable, queryParts.pageTable,
+	)
+
+	rows, err := s.queryPagesForMetadataBackfill(whereClause, 1)
+	if err != nil {
+		utils.Error("重新解析视频信息查询失败: %v", err)
+		return
+	}
+
+	s.backfillPageMetadata(rows, "重新解析视频信息")
 }
 
 func (s *Server) updateNFOViewCount(video *models.Video, outputDir string) {

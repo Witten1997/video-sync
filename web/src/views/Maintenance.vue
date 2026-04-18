@@ -12,6 +12,7 @@
           <el-option label="检查下载状态" value="repair_download" />
           <el-option label="刷新UP主头像" value="refresh_upper_faces" />
           <el-option label="回填画质信息" value="backfill_quality" />
+          <el-option label="重新解析视频信息" value="reparse_page_metadata" />
         </el-select>
         <el-button type="primary" :loading="running" :disabled="!selectedTask" @click="handleExecute">
           执行
@@ -27,7 +28,7 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
-import { refreshViewCounts, refreshUpperFaces, backfillQuality } from '@/api/maintenance'
+import { refreshViewCounts, refreshUpperFaces, backfillQuality, reparsePageMetadata } from '@/api/maintenance'
 import { repairDownloadRecords } from '@/api/download-records'
 
 defineOptions({ name: 'Maintenance' })
@@ -62,6 +63,10 @@ const handleExecute = async () => {
       resultType.value = 'success'
     } else if (selectedTask.value === 'backfill_quality') {
       const data = await backfillQuality()
+      resultMessage.value = data.message
+      resultType.value = 'success'
+    } else if (selectedTask.value === 'reparse_page_metadata') {
+      const data = await reparsePageMetadata()
       resultMessage.value = data.message
       resultType.value = 'success'
     }

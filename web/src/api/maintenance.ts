@@ -11,3 +11,7 @@ export const refreshUpperFaces = () => {
 export const backfillQuality = () => {
   return http.post<{ total: number; message: string }>('/maintenance/backfill-quality')
 }
+
+export const reparsePageMetadata = () => {
+  return http.post<{ total: number; message: string }>('/maintenance/reparse-page-metadata')
+}
