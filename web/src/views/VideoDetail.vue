@@ -42,6 +42,26 @@
                 <el-tag v-else-if="video.download_status === 0" type="info">待下载</el-tag>
                 <el-tag v-else type="success">已下载</el-tag>
               </el-descriptions-item>
+              <template v-if="video.single_page && pages[0]">
+                <el-descriptions-item label="画质">
+                  <el-tag v-if="qualityLabel(pages[0].quality)" :type="qualityTagType(pages[0].quality)" size="small">
+                    {{ qualityLabel(pages[0].quality) }}
+                  </el-tag>
+                  <span v-else style="color:#94a3b8">-</span>
+                </el-descriptions-item>
+                <el-descriptions-item label="帧率">
+                  {{ pages[0].frame_rate ? pages[0].frame_rate.toFixed(2) + ' fps' : '-' }}
+                </el-descriptions-item>
+                <el-descriptions-item label="分辨率">
+                  <template v-if="pages[0].width && pages[0].height">
+                    {{ pages[0].width }} × {{ pages[0].height }}
+                  </template>
+                  <span v-else style="color:#94a3b8">-</span>
+                </el-descriptions-item>
+                <el-descriptions-item label="方向">
+                  {{ orientationLabel(pages[0].orientation) || '-' }}
+                </el-descriptions-item>
+              </template>
               <el-descriptions-item label="简介" :span="2">
                 {{ video.intro || '暂无简介' }}
               </el-descriptions-item>
@@ -75,7 +95,29 @@
         </el-table-column>
         <el-table-column label="分辨率" width="120">
           <template #default="{ row }">
-            {{ row.width }} × {{ row.height }}
+            <template v-if="row.width && row.height">
+              {{ row.width }} × {{ row.height }}
+            </template>
+            <span v-else style="color:#94a3b8">-</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="画质" width="110" align="center">
+          <template #default="{ row }">
+            <el-tag v-if="qualityLabel(row.quality)" :type="qualityTagType(row.quality)" size="small">
+              {{ qualityLabel(row.quality) }}
+            </el-tag>
+            <span v-else style="color:#94a3b8">-</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="帧率" width="100" align="center">
+          <template #default="{ row }">
+            <span v-if="row.frame_rate">{{ row.frame_rate.toFixed(2) }}</span>
+            <span v-else style="color:#94a3b8">-</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="方向" width="80" align="center">
+          <template #default="{ row }">
+            {{ orientationLabel(row.orientation) || '-' }}
           </template>
         </el-table-column>
         <el-table-column label="状态" width="100" align="center">
@@ -115,6 +157,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { VideoPlay } from '@element-plus/icons-vue'
 import { getVideo, getVideoPages } from '@/api/video'
+import { qualityLabel, qualityTagType, orientationLabel } from '@/utils/quality'
 import { getProxiedImageUrl } from '@/utils/image'
 import type { Video, Page } from '@/types'
 import dayjs from 'dayjs'
@@ -142,9 +185,7 @@ const loadData = async () => {
   loading.value = true
   try {
     video.value = await getVideo(videoId)
-    if (!video.value.single_page) {
-      pages.value = await getVideoPages(videoId)
-    }
+    pages.value = await getVideoPages(videoId)
   } catch (error) {
     console.error('加载视频详情失败:', error)
   } finally {

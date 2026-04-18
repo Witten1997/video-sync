@@ -7,3 +7,7 @@ export const refreshViewCounts = () => {
 export const refreshUpperFaces = () => {
   return http.post<{ total: number; message: string }>('/maintenance/refresh-upper-faces')
 }
+
+export const backfillQuality = () => {
+  return http.post<{ total: number; message: string }>('/maintenance/backfill-quality')
+}

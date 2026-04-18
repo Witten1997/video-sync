@@ -37,6 +37,31 @@
         <el-option label="发布时间" value="pubtime" />
         <el-option label="播放量" value="view_count" />
       </el-select>
+      <el-select
+        v-model="minQuality"
+        placeholder="画质筛选"
+        clearable
+        style="width: 140px"
+        @change="handleSearch"
+      >
+        <el-option label="8K" :value="60" />
+        <el-option label="4K" :value="50" />
+        <el-option label="1080P60" :value="45" />
+        <el-option label="1080P" :value="40" />
+        <el-option label="720P" :value="30" />
+        <el-option label="480P" :value="20" />
+        <el-option label="360P" :value="10" />
+      </el-select>
+      <el-select
+        v-model="orientation"
+        placeholder="方向筛选"
+        clearable
+        style="width: 140px"
+        @change="handleSearch"
+      >
+        <el-option label="横屏" value="landscape" />
+        <el-option label="竖屏" value="portrait" />
+      </el-select>
       <el-button
         :icon="Sort"
         circle
@@ -172,6 +197,14 @@
           {{ row.single_page ? '单P' : '多P' }}
         </template>
       </el-table-column>
+      <el-table-column label="画质" width="100" align="center">
+        <template #default="{ row }">
+          <el-tag v-if="row.max_quality_label" :type="qualityTagType(row.max_quality)" size="small">
+            {{ row.max_quality_label }}
+          </el-tag>
+          <span v-else style="color:#94a3b8">-</span>
+        </template>
+      </el-table-column>
       <el-table-column label="播放量" width="100" align="center">
         <template #default="{ row }">
           {{ formatViewCount(row.view_count) }}
@@ -257,6 +290,9 @@
             <div class="grid-meta">
               <el-tag size="small" type="info">{{ item.bvid }}</el-tag>
               <el-tag size="small">{{ item.single_page ? '单P' : '多P' }}</el-tag>
+              <el-tag v-if="item.max_quality_label" size="small" :type="qualityTagType(item.max_quality)">
+                {{ item.max_quality_label }}
+              </el-tag>
             </div>
             <div class="grid-status">
               <el-tag v-if="!item.valid" type="danger" size="small">无效</el-tag>
@@ -314,6 +350,7 @@ import { Search, List, Grid, VideoPlay, View, Download, Delete, Refresh, Picture
 import { getVideos, deleteVideo, redownloadVideo, getVideoPages } from '@/api/video'
 import { getVideoSources } from '@/api/video-source'
 import { getProxiedImageUrl } from '@/utils/image'
+import { qualityTagType } from '@/utils/quality'
 import type { Video, VideoSource } from '@/types'
 import dayjs from 'dayjs'
 import VideoPlayer from '@/components/VideoPlayer.vue'
@@ -334,6 +371,8 @@ const viewMode = ref<'list' | 'grid' | 'source'>('grid')
 const selectedVideos = ref<Video[]>([])
 const sortBy = ref('pubtime')
 const sortOrder = ref('desc')
+const minQuality = ref<number | ''>('')
+const orientation = ref<'landscape' | 'portrait' | ''>('')
 
 // 视频源视图相关
 const sourceLoading = ref(false)
@@ -365,8 +404,12 @@ const loadData = async () => {
       page_size: pageSize.value,
       keyword: searchKeyword.value,
       source_type: filterSourceType.value,
+      orientation: orientation.value,
       sort_by: sortBy.value,
       sort_order: sortOrder.value
+    }
+    if (minQuality.value) {
+      params.min_quality = minQuality.value
     }
     // 如果在视频源视图中选中了某个源，按源过滤
     if (selectedSource.value) {

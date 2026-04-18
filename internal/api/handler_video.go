@@ -25,6 +25,7 @@ func (s *Server) handleListVideos(c *gin.Context) {
 	sourceType := c.Query("source_type")
 	sourceID := c.Query("source_id")
 	keyword := c.Query("keyword")
+	orientation := c.Query("orientation")
 
 	if page < 1 {
 		page = 1
@@ -70,6 +71,21 @@ func (s *Server) handleListVideos(c *gin.Context) {
 	// 按关键词过滤（搜索标题或BV号）
 	if keyword != "" {
 		query = query.Where("name LIKE ? OR bvid LIKE ?", "%"+keyword+"%", "%"+keyword+"%")
+	}
+
+	// 按最低画质过滤：只要视频下任一分P画质达到阈值即命中
+	if minQualityStr := c.Query("min_quality"); minQualityStr != "" {
+		if minQ, err := strconv.Atoi(minQualityStr); err == nil && minQ > 0 {
+			query = query.Where("id IN (SELECT video_id FROM page WHERE quality >= ?)", int8(minQ))
+		}
+	}
+
+	// 鎸夋柟鍚戣繃婊わ細鍙瑙嗛涓嬩换涓€鍒哖鏂瑰悜鍖归厤鍗冲懡涓?
+	switch orientation {
+	case "landscape", strconv.Itoa(int(models.OrientationLandscape)):
+		query = query.Where("id IN (SELECT video_id FROM page WHERE orientation = ?)", models.OrientationLandscape)
+	case "portrait", strconv.Itoa(int(models.OrientationPortrait)):
+		query = query.Where("id IN (SELECT video_id FROM page WHERE orientation = ?)", models.OrientationPortrait)
 	}
 
 	// 获取总数
@@ -118,12 +134,49 @@ func (s *Server) handleListVideos(c *gin.Context) {
 		s.convertVideoPathToRelative(&videos[i])
 	}
 
+	// 查询每个视频的最高画质并拼装到响应
+	type videoListItem struct {
+		models.Video
+		MaxQuality      int8   `json:"max_quality"`
+		MaxQualityLabel string `json:"max_quality_label"`
+	}
+
+	items := make([]videoListItem, 0, len(videos))
+	if len(videos) > 0 {
+		videoIDs := make([]uint, 0, len(videos))
+		for _, v := range videos {
+			videoIDs = append(videoIDs, v.ID)
+		}
+		type qualityRow struct {
+			VideoID    uint
+			MaxQuality int8
+		}
+		var rows []qualityRow
+		s.db.Model(&models.Page{}).
+			Select("video_id, MAX(quality) as max_quality").
+			Where("video_id IN ?", videoIDs).
+			Group("video_id").
+			Scan(&rows)
+		maxMap := make(map[uint]int8, len(rows))
+		for _, r := range rows {
+			maxMap[r.VideoID] = r.MaxQuality
+		}
+		for i := range videos {
+			q := maxMap[videos[i].ID]
+			items = append(items, videoListItem{
+				Video:           videos[i],
+				MaxQuality:      q,
+				MaxQualityLabel: models.QualityLabel(q),
+			})
+		}
+	}
+
 	respondSuccess(c, gin.H{
 		"total":       total,
 		"page":        page,
 		"page_size":   pageSize,
 		"total_pages": (int(total) + pageSize - 1) / pageSize,
-		"items":       videos,
+		"items":       items,
 	})
 }
 

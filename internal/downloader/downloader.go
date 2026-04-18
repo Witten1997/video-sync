@@ -313,6 +313,23 @@ func (d *Downloader) downloadPageVideo(ctx context.Context, video *models.Video,
 	})
 	d.tracker.NotifyProgress(video.ID, page.PID, "video", pageProgress.GetSubTask("video"))
 
+	// 探测实际分辨率/帧率，写入 page 结构供后续持久化
+	if videoFileName != "" {
+		probePath := filepath.Join(outputDir, videoFileName)
+		if probe, err := ProbeVideo(ctx, probePath); err != nil {
+			utils.Warn("ffprobe 探测失败: %s, %v", probePath, err)
+		} else {
+			page.Width = probe.Width
+			page.Height = probe.Height
+			page.FrameRate = probe.FrameRate
+			page.Quality = models.CalcQuality(probe.Height, probe.FrameRate)
+			page.Orientation = models.CalcOrientation(probe.Width, probe.Height)
+			utils.Info("探测画质: %s P%d -> %dx%d@%.2ffps [%s]",
+				video.Name, page.PID, probe.Width, probe.Height, probe.FrameRate,
+				models.QualityLabel(page.Quality))
+		}
+	}
+
 	utils.Info("视频下载完成: %s [BV%s] P%d", video.Name, video.BVid, page.PID)
 	return nil
 }

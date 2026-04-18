@@ -1,18 +1,42 @@
 package api
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"time"
 
 	"bili-download/internal/database/models"
+	"bili-download/internal/downloader"
 	"bili-download/internal/nfo"
 	"bili-download/internal/utils"
 
 	"github.com/gin-gonic/gin"
 )
+
+type backfillQualityQueryParts struct {
+	pageTable    string
+	videoTable   string
+	selectClause string
+	joinClause   string
+	whereClause  string
+}
+
+func buildBackfillQualityQueryParts() backfillQualityQueryParts {
+	pageTable := (models.Page{}).TableName()
+	videoTable := (models.Video{}).TableName()
+
+	return backfillQualityQueryParts{
+		pageTable:    pageTable,
+		videoTable:   videoTable,
+		selectClause: fmt.Sprintf("%s.*, %s.name as video_name, %s.single_page as single_page, %s.path as video_path", pageTable, videoTable, videoTable, videoTable),
+		joinClause:   fmt.Sprintf("JOIN %s ON %s.id = %s.video_id", videoTable, videoTable, pageTable),
+		whereClause:  fmt.Sprintf("%s.download_status = ? AND (%s.quality = 0 OR %s.width = 0)", pageTable, pageTable, pageTable),
+	}
+}
 
 // refreshViewCountRunning 防止重复执行
 var refreshViewCountRunning atomic.Bool
@@ -138,6 +162,122 @@ func (s *Server) doRefreshUpperFaces() {
 
 	utils.Info("刷新UP主头像完成: 共 %d 个，更新 %d 个，失败 %d 个", len(submissions), updated, failed)
 }
+
+// backfillQualityRunning 防止重复执行
+var backfillQualityRunning atomic.Bool
+
+// handleBackfillQuality 扫描已下载文件回填 width/height/frame_rate/quality/orientation
+func (s *Server) handleBackfillQuality(c *gin.Context) {
+	if !backfillQualityRunning.CompareAndSwap(false, true) {
+		respondError(c, 409, "回填画质任务正在执行中，请稍后再试")
+		return
+	}
+
+	var count int64
+	s.db.Model(&models.Page{}).Where("download_status = ? AND (quality = 0 OR width = 0)", 1).Count(&count)
+
+	go s.doBackfillQuality()
+
+	respondSuccess(c, gin.H{
+		"total":   count,
+		"message": fmt.Sprintf("已开始回填 %d 个分P的画质信息，请查看日志了解进度", count),
+	})
+}
+
+func (s *Server) doBackfillQuality() {
+	defer backfillQualityRunning.Store(false)
+
+	queryParts := buildBackfillQualityQueryParts()
+
+	type pageWithVideo struct {
+		models.Page
+		VideoName  string
+		SinglePage bool
+		VideoPath  string
+	}
+	var rows []pageWithVideo
+	err := s.db.Table(queryParts.pageTable).
+		Select(queryParts.selectClause).
+		Joins(queryParts.joinClause).
+		Where(queryParts.whereClause, 1).
+		Scan(&rows).Error
+	if err != nil {
+		utils.Error("回填画质查询失败: %v", err)
+		return
+	}
+
+	videoExts := []string{".mp4", ".mkv", ".webm", ".flv", ".avi", ".m4v"}
+	updated, skipped, failed := 0, 0, 0
+
+	for _, r := range rows {
+		if r.VideoPath == "" {
+			skipped++
+			continue
+		}
+		outputDir := r.VideoPath
+		if !filepath.IsAbs(outputDir) {
+			outputDir = filepath.Join(s.config.Paths.DownloadBase, outputDir)
+		}
+
+		var baseName string
+		if r.SinglePage {
+			baseName = utils.Filenamify(r.VideoName)
+		} else {
+			baseName = fmt.Sprintf("%s-%s", utils.Filenamify(r.VideoName), utils.Filenamify(r.Page.Name))
+		}
+
+		filePath := ""
+		entries, _ := os.ReadDir(outputDir)
+		for _, entry := range entries {
+			if entry.IsDir() {
+				continue
+			}
+			name := entry.Name()
+			if !strings.HasPrefix(name, baseName) {
+				continue
+			}
+			lower := strings.ToLower(name)
+			for _, ext := range videoExts {
+				if strings.HasSuffix(lower, ext) {
+					filePath = filepath.Join(outputDir, name)
+					break
+				}
+			}
+			if filePath != "" {
+				break
+			}
+		}
+		if filePath == "" {
+			utils.Warn("回填画质: 未找到文件 %s/%s", outputDir, baseName)
+			skipped++
+			continue
+		}
+
+		probe, err := downloader.ProbeVideo(context.Background(), filePath)
+		if err != nil {
+			utils.Warn("回填画质: ffprobe 失败 %s: %v", filePath, err)
+			failed++
+			continue
+		}
+
+		updates := map[string]interface{}{
+			"width":       probe.Width,
+			"height":      probe.Height,
+			"frame_rate":  probe.FrameRate,
+			"quality":     models.CalcQuality(probe.Height, probe.FrameRate),
+			"orientation": models.CalcOrientation(probe.Width, probe.Height),
+		}
+		if err := s.db.Model(&models.Page{}).Where("id = ?", r.Page.ID).Updates(updates).Error; err != nil {
+			utils.Warn("回填画质: 更新失败 page=%d: %v", r.Page.ID, err)
+			failed++
+			continue
+		}
+		updated++
+	}
+
+	utils.Info("回填画质完成: 共 %d 个，成功 %d 个，跳过 %d 个，失败 %d 个", len(rows), updated, skipped, failed)
+}
+
 func (s *Server) updateNFOViewCount(video *models.Video, outputDir string) {
 	for _, page := range video.Pages {
 		var nfoFile string

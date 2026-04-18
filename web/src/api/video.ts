@@ -7,8 +7,10 @@ export const getVideos = (params?: PageParams & {
   source_type?: string
   status?: string
   keyword?: string
+  orientation?: 'landscape' | 'portrait'
   sort_by?: string
   sort_order?: string
+  min_quality?: number
 }) => {
   return http.get<PageResponse<Video>>('/videos', { params })
 }

@@ -43,6 +43,14 @@ type ManagerEvent struct {
 	Record    *models.DownloadRecord `json:"record,omitempty"`
 }
 
+type pageDownloadExecutor interface {
+	DownloadPage(ctx context.Context, video *models.Video, page *models.Page, outputDir string) error
+	GetTracker() *ProgressTracker
+	SetProgressCallback(callback ProgressCallback)
+	Cleanup()
+	UpdateConfig(cfg *config.Config)
+}
+
 // EventHandler 事件处理器
 type EventHandler func(event ManagerEvent)
 
@@ -51,7 +59,7 @@ type DownloadManager struct {
 	config             *config.Config
 	db                 *gorm.DB
 	biliClient         *bilibili.Client
-	downloader         *Downloader
+	downloader         pageDownloadExecutor
 	queue              *TaskQueue
 	concurrency        *ConcurrencyController
 	tracker            *ProgressTracker
@@ -63,6 +71,7 @@ type DownloadManager struct {
 	wg                 sync.WaitGroup
 	mu                 sync.RWMutex
 	running            bool
+	persistPageFn      func(page *models.Page) error
 	lastProgressUpdate sync.Map // videoID -> time.Time (进度更新节流)
 }
 
@@ -130,6 +139,33 @@ func NewDownloadManager(cfg *config.Config, db *gorm.DB, biliClient *bilibili.Cl
 	})
 
 	return manager, nil
+}
+
+func buildDownloadedPageUpdates(page *models.Page) map[string]interface{} {
+	updates := map[string]interface{}{
+		"download_status": 1,
+	}
+	if page != nil && page.Width > 0 && page.Height > 0 {
+		updates["width"] = page.Width
+		updates["height"] = page.Height
+		updates["frame_rate"] = page.FrameRate
+		updates["quality"] = page.Quality
+		updates["orientation"] = page.Orientation
+	}
+	return updates
+}
+
+func (dm *DownloadManager) persistDownloadedPage(page *models.Page) error {
+	if page == nil {
+		return nil
+	}
+	if dm.persistPageFn != nil {
+		return dm.persistPageFn(page)
+	}
+	if dm.db == nil {
+		return nil
+	}
+	return dm.db.Model(&models.Page{}).Where("id = ?", page.ID).Updates(buildDownloadedPageUpdates(page)).Error
 }
 
 // Start 启动管理器
@@ -259,7 +295,6 @@ func (dm *DownloadManager) scheduleNextTask() {
 func (dm *DownloadManager) executeVideoTask(task *DownloadTask) {
 	defer dm.wg.Done()
 
-	// 获取视频级别许可
 	if err := dm.concurrency.AcquireVideo(task.Context); err != nil {
 		task.SetError(err)
 		task.SetStatus(TaskStatusCancelled)
@@ -267,14 +302,12 @@ func (dm *DownloadManager) executeVideoTask(task *DownloadTask) {
 	}
 	defer dm.concurrency.ReleaseVideo()
 
-	// 记录运行中的任务
 	dm.runningTasks.Store(task.ID, task)
 	defer func() {
 		dm.runningTasks.Delete(task.ID)
 		dm.completedTasks.Store(task.ID, task)
 	}()
 
-	// 更新状态
 	task.SetStatus(TaskStatusRunning)
 	dm.emitEvent(ManagerEvent{
 		Type:      EventTaskStarted,
@@ -282,13 +315,12 @@ func (dm *DownloadManager) executeVideoTask(task *DownloadTask) {
 		Timestamp: time.Now(),
 	})
 
-	// 下载所有分P
 	video := task.Video
 	utils.Info("开始下载视频: %s (BV%s), Pages数量: %d", video.Name, video.BVid, len(video.Pages))
 
-	for _, page := range video.Pages {
+	for i := range video.Pages {
+		page := &video.Pages[i]
 		utils.Info("准备下载分P: %s - P%d (%s)", video.Name, page.PID, page.Name)
-		// 检查是否取消
 		if task.IsCancelled() {
 			task.SetStatus(TaskStatusCancelled)
 			dm.emitEvent(ManagerEvent{
@@ -299,12 +331,10 @@ func (dm *DownloadManager) executeVideoTask(task *DownloadTask) {
 			return
 		}
 
-		// 获取分P级别许可
 		if err := dm.concurrency.AcquirePage(task.Context); err != nil {
 			task.SetError(err)
 			task.SetStatus(TaskStatusFailed)
 			dm.handleTaskFailure(task)
-			// 更新下载记录为失败
 			if dm.db != nil && task.RecordID > 0 {
 				now := time.Now()
 				dm.db.Model(&models.DownloadRecord{}).Where("id = ?", task.RecordID).
@@ -317,8 +347,7 @@ func (dm *DownloadManager) executeVideoTask(task *DownloadTask) {
 			return
 		}
 
-		// 下载分P到视频文件夹（task.OutputDir已经是视频专属文件夹）
-		err := dm.downloader.DownloadPage(task.Context, video, &page, task.OutputDir)
+		err := dm.downloader.DownloadPage(task.Context, video, page, task.OutputDir)
 		dm.concurrency.ReleasePage()
 
 		if err != nil {
@@ -326,7 +355,6 @@ func (dm *DownloadManager) executeVideoTask(task *DownloadTask) {
 			task.SetError(err)
 			task.SetStatus(TaskStatusFailed)
 			dm.handleTaskFailure(task)
-			// 更新下载记录为失败
 			if dm.db != nil && task.RecordID > 0 {
 				now := time.Now()
 				dm.db.Model(&models.DownloadRecord{}).Where("id = ?", task.RecordID).
@@ -340,10 +368,8 @@ func (dm *DownloadManager) executeVideoTask(task *DownloadTask) {
 		}
 	}
 
-	// 任务完成
 	task.SetStatus(TaskStatusCompleted)
 
-	// 更新下载记录为完成
 	finalStatus := "completed"
 	if dm.db != nil && task.RecordID > 0 {
 		now := time.Now()
@@ -376,17 +402,17 @@ func (dm *DownloadManager) executeVideoTask(task *DownloadTask) {
 		}
 	}
 
-	// 只有全部下载成功才更新视频下载状态
-	if dm.db != nil && finalStatus == "completed" {
-		if err := dm.db.Model(&models.Video{}).Where("id = ?", video.ID).Update("download_status", 1).Error; err != nil {
-			utils.Warn("更新视频下载状态失败: %v", err)
-		} else {
-			utils.Info("已更新视频 [%s] 的下载状态", video.Name)
+	if finalStatus == "completed" {
+		if dm.db != nil {
+			if err := dm.db.Model(&models.Video{}).Where("id = ?", video.ID).Update("download_status", 1).Error; err != nil {
+				utils.Warn("更新视频下载状态失败: %v", err)
+			} else {
+				utils.Info("已更新视频 [%s] 的下载状态", video.Name)
+			}
 		}
 
-		// 更新所有分P的下载状态
-		for _, page := range video.Pages {
-			if err := dm.db.Model(&models.Page{}).Where("id = ?", page.ID).Update("download_status", 1).Error; err != nil {
+		for i := range video.Pages {
+			if err := dm.persistDownloadedPage(&video.Pages[i]); err != nil {
 				utils.Warn("更新分P下载状态失败: %v", err)
 			}
 		}
@@ -406,7 +432,6 @@ func (dm *DownloadManager) executeVideoTask(task *DownloadTask) {
 func (dm *DownloadManager) executePageTask(task *DownloadTask) {
 	defer dm.wg.Done()
 
-	// 获取分P级别许可
 	if err := dm.concurrency.AcquirePage(task.Context); err != nil {
 		task.SetError(err)
 		task.SetStatus(TaskStatusCancelled)
@@ -414,14 +439,12 @@ func (dm *DownloadManager) executePageTask(task *DownloadTask) {
 	}
 	defer dm.concurrency.ReleasePage()
 
-	// 记录运行中的任务
 	dm.runningTasks.Store(task.ID, task)
 	defer func() {
 		dm.runningTasks.Delete(task.ID)
 		dm.completedTasks.Store(task.ID, task)
 	}()
 
-	// 更新状态
 	task.SetStatus(TaskStatusRunning)
 	dm.emitEvent(ManagerEvent{
 		Type:      EventTaskStarted,
@@ -429,7 +452,6 @@ func (dm *DownloadManager) executePageTask(task *DownloadTask) {
 		Timestamp: time.Now(),
 	})
 
-	// 下载分P到视频文件夹（task.OutputDir已经是视频专属文件夹）
 	err := dm.downloader.DownloadPage(task.Context, task.Video, task.Page, task.OutputDir)
 	if err != nil {
 		utils.Error("下载分P失败: %v", err)
@@ -439,7 +461,10 @@ func (dm *DownloadManager) executePageTask(task *DownloadTask) {
 		return
 	}
 
-	// 任务完成
+	if err := dm.persistDownloadedPage(task.Page); err != nil {
+		utils.Warn("更新分P下载状态失败: %v", err)
+	}
+
 	task.SetStatus(TaskStatusCompleted)
 	dm.emitEvent(ManagerEvent{
 		Type:      EventTaskCompleted,
@@ -1452,7 +1477,8 @@ func (dm *DownloadManager) updateQueuedTaskPathsByType(oldBase, newBase string, 
 }
 
 func (dm *DownloadManager) GetDownloader() *Downloader {
-	return dm.downloader
+	downloader, _ := dm.downloader.(*Downloader)
+	return downloader
 }
 
 // buildFileDetails 根据配置构建文件详情列表

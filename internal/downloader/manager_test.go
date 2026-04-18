@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"bili-download/internal/config"
 	"bili-download/internal/database/models"
 )
 
@@ -385,3 +386,180 @@ func BenchmarkSemaphoreAcquireRelease(b *testing.B) {
 		sem.Release()
 	}
 }
+
+func TestBuildDownloadedPageUpdatesIncludesDetectedQuality(t *testing.T) {
+	page := &models.Page{
+		ID:          7,
+		Width:       1920,
+		Height:      1080,
+		FrameRate:   59.94,
+		Quality:     models.Quality1080P60,
+		Orientation: models.OrientationLandscape,
+	}
+
+	updates := buildDownloadedPageUpdates(page)
+
+	if got := updates["download_status"]; got != 1 {
+		t.Fatalf("expected download_status 1, got %#v", got)
+	}
+	if got := updates["width"]; got != 1920 {
+		t.Fatalf("expected width 1920, got %#v", got)
+	}
+	if got := updates["height"]; got != 1080 {
+		t.Fatalf("expected height 1080, got %#v", got)
+	}
+	if got := updates["frame_rate"]; got != float32(59.94) {
+		t.Fatalf("expected frame_rate 59.94, got %#v", got)
+	}
+	if got := updates["quality"]; got != models.Quality1080P60 {
+		t.Fatalf("expected quality %d, got %#v", models.Quality1080P60, got)
+	}
+	if got := updates["orientation"]; got != models.OrientationLandscape {
+		t.Fatalf("expected orientation %d, got %#v", models.OrientationLandscape, got)
+	}
+}
+
+func TestBuildDownloadedPageUpdatesFallsBackToStatusOnlyWithoutProbeData(t *testing.T) {
+	page := &models.Page{ID: 9}
+
+	updates := buildDownloadedPageUpdates(page)
+
+	if len(updates) != 1 {
+		t.Fatalf("expected only download_status update without probe data, got %#v", updates)
+	}
+	if got := updates["download_status"]; got != 1 {
+		t.Fatalf("expected download_status 1, got %#v", got)
+	}
+}
+
+func TestExecutePageTaskPersistsDownloadedPage(t *testing.T) {
+	video := &models.Video{ID: 1, BVid: "BV1xx411c7mD", Name: "test video"}
+	page := &models.Page{ID: 2, PID: 1, CID: 123, Name: "P1"}
+	task := NewDownloadTask(TaskTypePage, video, page, "./downloads")
+
+	tracker := NewProgressTracker()
+	fakeDownloader := &fakePageDownloader{
+		tracker: tracker,
+		downloadPageFn: func(ctx context.Context, video *models.Video, page *models.Page, outputDir string) error {
+			page.Width = 1280
+			page.Height = 720
+			page.FrameRate = 30
+			page.Quality = models.Quality720P
+			page.Orientation = models.OrientationLandscape
+			return nil
+		},
+	}
+
+	var persistedPage *models.Page
+	dm := &DownloadManager{
+		downloader:  fakeDownloader,
+		concurrency: NewConcurrencyController(1, 1),
+		persistPageFn: func(page *models.Page) error {
+			copy := *page
+			persistedPage = &copy
+			return nil
+		},
+	}
+	dm.wg.Add(1)
+
+	dm.executePageTask(task)
+
+	if task.GetStatus() != TaskStatusCompleted {
+		t.Fatalf("expected completed task status, got %s", task.GetStatus())
+	}
+	if persistedPage == nil {
+		t.Fatal("expected executePageTask to persist downloaded page state")
+	}
+	if persistedPage.ID != page.ID {
+		t.Fatalf("expected persisted page id %d, got %d", page.ID, persistedPage.ID)
+	}
+	if persistedPage.Width != 1280 || persistedPage.Height != 720 {
+		t.Fatalf("expected persisted dimensions 1280x720, got %dx%d", persistedPage.Width, persistedPage.Height)
+	}
+	if persistedPage.Quality != models.Quality720P {
+		t.Fatalf("expected persisted quality %d, got %d", models.Quality720P, persistedPage.Quality)
+	}
+}
+
+func TestExecuteVideoTaskPersistsDetectedPageQuality(t *testing.T) {
+	video := &models.Video{
+		ID:   1,
+		BVid: "BV1xx411c7mD",
+		Name: "test video",
+		Pages: []models.Page{
+			{ID: 11, PID: 1, CID: 123, Name: "P1"},
+		},
+	}
+	task := NewDownloadTask(TaskTypeVideo, video, nil, "./downloads")
+
+	fakeDownloader := &fakePageDownloader{
+		tracker: NewProgressTracker(),
+		downloadPageFn: func(ctx context.Context, video *models.Video, page *models.Page, outputDir string) error {
+			page.Width = 1920
+			page.Height = 1080
+			page.FrameRate = 60
+			page.Quality = models.Quality1080P60
+			page.Orientation = models.OrientationLandscape
+			return nil
+		},
+	}
+
+	persisted := make(map[uint]models.Page)
+	dm := &DownloadManager{
+		downloader:  fakeDownloader,
+		concurrency: NewConcurrencyController(1, 1),
+		db:          nil,
+		persistPageFn: func(page *models.Page) error {
+			persisted[page.ID] = *page
+			return nil
+		},
+	}
+	dm.wg.Add(1)
+
+	dm.executeVideoTask(task)
+
+	stored, ok := persisted[11]
+	if !ok {
+		t.Fatal("expected executeVideoTask to persist page after full video download")
+	}
+	if stored.Width != 1920 || stored.Height != 1080 {
+		t.Fatalf("expected persisted dimensions 1920x1080, got %dx%d", stored.Width, stored.Height)
+	}
+	if stored.FrameRate != 60 {
+		t.Fatalf("expected persisted frame rate 60, got %v", stored.FrameRate)
+	}
+	if stored.Quality != models.Quality1080P60 {
+		t.Fatalf("expected persisted quality %d, got %d", models.Quality1080P60, stored.Quality)
+	}
+	if stored.Orientation != models.OrientationLandscape {
+		t.Fatalf("expected persisted orientation %d, got %d", models.OrientationLandscape, stored.Orientation)
+	}
+}
+
+type fakePageDownloader struct {
+	tracker        *ProgressTracker
+	callback       ProgressCallback
+	downloadPageFn func(ctx context.Context, video *models.Video, page *models.Page, outputDir string) error
+}
+
+func (f *fakePageDownloader) DownloadPage(ctx context.Context, video *models.Video, page *models.Page, outputDir string) error {
+	if f.downloadPageFn != nil {
+		return f.downloadPageFn(ctx, video, page, outputDir)
+	}
+	return nil
+}
+
+func (f *fakePageDownloader) GetTracker() *ProgressTracker {
+	if f.tracker == nil {
+		f.tracker = NewProgressTracker()
+	}
+	return f.tracker
+}
+
+func (f *fakePageDownloader) SetProgressCallback(callback ProgressCallback) {
+	f.callback = callback
+}
+
+func (f *fakePageDownloader) Cleanup() {}
+
+func (f *fakePageDownloader) UpdateConfig(cfg *config.Config) {}

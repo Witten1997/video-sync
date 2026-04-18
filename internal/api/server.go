@@ -248,6 +248,7 @@ func (s *Server) setupRouter() {
 		{
 			maintenance.POST("/refresh-view-counts", s.handleRefreshViewCounts)
 			maintenance.POST("/refresh-upper-faces", s.handleRefreshUpperFaces)
+			maintenance.POST("/backfill-quality", s.handleBackfillQuality)
 		}
 
 		// 快捷订阅

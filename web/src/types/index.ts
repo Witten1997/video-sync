@@ -57,6 +57,8 @@ export interface Video {
   submission_id?: number
   created_at: string
   pages?: Page[]
+  max_quality?: number
+  max_quality_label?: string
 }
 
 // 分P信息
@@ -69,6 +71,9 @@ export interface Page {
   duration: number
   width: number
   height: number
+  frame_rate?: number
+  quality?: number
+  orientation?: number
   image: string
   download_status: number
   path: string

@@ -11,6 +11,7 @@
           <el-option label="刷新播放量" value="refresh_view_counts" />
           <el-option label="检查下载状态" value="repair_download" />
           <el-option label="刷新UP主头像" value="refresh_upper_faces" />
+          <el-option label="回填画质信息" value="backfill_quality" />
         </el-select>
         <el-button type="primary" :loading="running" :disabled="!selectedTask" @click="handleExecute">
           执行
@@ -26,7 +27,7 @@
 
 <script setup lang="ts">
 import { ref } from 'vue'
-import { refreshViewCounts, refreshUpperFaces } from '@/api/maintenance'
+import { refreshViewCounts, refreshUpperFaces, backfillQuality } from '@/api/maintenance'
 import { repairDownloadRecords } from '@/api/download-records'
 
 defineOptions({ name: 'Maintenance' })
@@ -57,6 +58,10 @@ const handleExecute = async () => {
       }
     } else if (selectedTask.value === 'refresh_upper_faces') {
       const data = await refreshUpperFaces()
+      resultMessage.value = data.message
+      resultType.value = 'success'
+    } else if (selectedTask.value === 'backfill_quality') {
+      const data = await backfillQuality()
       resultMessage.value = data.message
       resultType.value = 'success'
     }
