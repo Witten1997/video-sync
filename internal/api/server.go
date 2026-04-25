@@ -252,6 +252,13 @@ func (s *Server) setupRouter() {
 			maintenance.POST("/reparse-page-metadata", s.handleReparsePageMetadata)
 		}
 
+		// 小红书下载
+		xhsAPI := api.Group("/xhs")
+		{
+			xhsAPI.POST("/parse", s.handleXHSParse)
+			xhsAPI.POST("/download", s.handleXHSDownload)
+		}
+
 		// 快捷订阅
 		subscription := api.Group("/subscription")
 		{

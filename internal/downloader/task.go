@@ -17,6 +17,7 @@ const (
 	TaskTypePage       TaskType = "page"       // 分P任务（单个分P）
 	TaskTypeCollection TaskType = "collection" // 合集任务（批量视频）
 	TaskTypeYtdlp      TaskType = "ytdlp"      // yt-dlp任务（通用URL下载）
+	TaskTypeXHS        TaskType = "xhs"        // 小红书笔记下载任务
 )
 
 // TaskStatus 任务状态

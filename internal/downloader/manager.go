@@ -278,6 +278,13 @@ func (dm *DownloadManager) scheduleNextTask() {
 		} else {
 			dm.queue.Enqueue(task)
 		}
+	case TaskTypeXHS:
+		if dm.concurrency.CanStartVideo() {
+			dm.wg.Add(1)
+			go dm.executeXHSTask(task)
+		} else {
+			dm.queue.Enqueue(task)
+		}
 	case TaskTypePage:
 		if dm.concurrency.CanStartPage() {
 			dm.wg.Add(1)

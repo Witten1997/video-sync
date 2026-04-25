@@ -4,12 +4,15 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"strings"
 	"time"
 
 	"bili-download/internal/bilibili"
 	"bili-download/internal/config"
 	"bili-download/internal/database/models"
 	"bili-download/internal/downloader"
+	"bili-download/internal/utils"
+	"bili-download/internal/xhs"
 
 	"gorm.io/gorm"
 )
@@ -47,6 +50,7 @@ type URLDownloadSourceType string
 const (
 	URLDownloadSourceTypeBilibili URLDownloadSourceType = "bilibili"
 	URLDownloadSourceTypeExternal URLDownloadSourceType = "external"
+	URLDownloadSourceTypeXHS      URLDownloadSourceType = "xhs"
 )
 
 type URLDownloadOutcome string
@@ -134,6 +138,10 @@ func NewURLDownloadService(cfg *config.Config, db *gorm.DB, biliClient *bilibili
 func (s *URLDownloadService) Submit(ctx context.Context, req URLDownloadRequest) (*URLDownloadResult, error) {
 	if isBilibiliURL(req.URL) {
 		return s.submitBilibili(ctx, req)
+	}
+
+	if isXHSURL(req.URL) {
+		return s.submitXHS(ctx, req)
 	}
 
 	return s.submitYtdlp(ctx, req)
@@ -352,6 +360,112 @@ func isBilibiliURL(rawURL string) bool {
 
 	host := parsedURL.Hostname()
 	return host == "www.bilibili.com" || host == "bilibili.com" || host == "b23.tv" || host == "m.bilibili.com"
+}
+
+// isXHSURL 判断是否为小红书链接
+func isXHSURL(rawURL string) bool {
+	if rawURL == "" {
+		return false
+	}
+	return strings.Contains(rawURL, "xiaohongshu.com") || strings.Contains(rawURL, "xhslink.com")
+}
+
+// submitXHS 提交小红书笔记下载任务（异步）
+func (s *URLDownloadService) submitXHS(ctx context.Context, req URLDownloadRequest) (*URLDownloadResult, error) {
+	// 解析链接获取笔记元信息（同步，确保返回前已校验）
+	client := xhs.NewClient(s.config, s.config.Paths.URLDownloadBase())
+	note, err := client.Parser().Parse(ctx, req.URL)
+	if err != nil {
+		return nil, &URLDownloadError{
+			Type:    URLDownloadErrorTypeValidation,
+			Message: "解析小红书链接失败: " + err.Error(),
+			Err:     err,
+		}
+	}
+	if len(note.MediaItems) == 0 {
+		return nil, &URLDownloadError{
+			Type:    URLDownloadErrorTypeValidation,
+			Message: "小红书笔记未发现可下载媒体",
+		}
+	}
+
+	bvid := BuildExternalVideoKey("XHS", note.NoteID)
+
+	// 已存在则直接复用
+	var existingVideo models.Video
+	if s.db.Where("bvid = ?", bvid).First(&existingVideo).Error == nil {
+		task, taskErr := s.downloadMgr.PrepareAndAddXHSTask(&existingVideo, note.OriginalURL, s.config.Paths.URLDownloadBase())
+		if taskErr != nil {
+			return nil, &URLDownloadError{
+				Type:    URLDownloadErrorTypeInternal,
+				Message: taskErr.Error(),
+				Err:     taskErr,
+			}
+		}
+		return newURLDownloadResult(task, &existingVideo, URLDownloadSourceTypeXHS, URLDownloadOutcomeExistingVideo), nil
+	}
+
+	title := note.Title
+	if title == "" {
+		title = note.Description
+	}
+	if title == "" {
+		title = "XHS-" + note.NoteID
+	}
+	title = utils.TruncateString(title, 200)
+
+	pubTime := time.Now()
+	if note.PublishTime > 0 {
+		pubTime = time.Unix(note.PublishTime/1000, 0)
+	}
+
+	video := models.Video{
+		BVid:           bvid,
+		Name:           title,
+		Intro:          note.Description,
+		UpperName:      note.Author.Nickname,
+		PubTime:        pubTime,
+		FavTime:        time.Now(),
+		CTime:          pubTime,
+		SinglePage:     true,
+		Valid:          true,
+		ShouldDownload: true,
+		Tags:           note.Tags,
+	}
+	if cover := firstImageURL(note); cover != "" {
+		video.Cover = cover
+	}
+
+	if err := s.db.Create(&video).Error; err != nil {
+		return nil, &URLDownloadError{
+			Type:    URLDownloadErrorTypeInternal,
+			Message: err.Error(),
+			Err:     err,
+		}
+	}
+
+	task, err := s.downloadMgr.PrepareAndAddXHSTask(&video, note.OriginalURL, s.config.Paths.URLDownloadBase())
+	if err != nil {
+		return nil, &URLDownloadError{
+			Type:    URLDownloadErrorTypeInternal,
+			Message: err.Error(),
+			Err:     err,
+		}
+	}
+
+	return newURLDownloadResult(task, &video, URLDownloadSourceTypeXHS, URLDownloadOutcomeCreatedVideo), nil
+}
+
+func firstImageURL(note *xhs.Note) string {
+	if note == nil {
+		return ""
+	}
+	for _, item := range note.MediaItems {
+		if item.ImageURL != "" {
+			return item.ImageURL
+		}
+	}
+	return ""
 }
 
 func (r *URLDownloadResult) SuccessMessage() string {
