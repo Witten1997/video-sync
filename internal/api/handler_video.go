@@ -307,12 +307,31 @@ func (s *Server) handleGetVideoPages(c *gin.Context) {
 	}
 
 	var pages []models.Page
-	if err := s.db.Where("video_id = ?", id).Find(&pages).Error; err != nil {
+	if err := s.db.Where("video_id = ?", id).Order("pid asc").Find(&pages).Error; err != nil {
 		respondInternalError(c, err)
 		return
 	}
 
+	// 将 file_path 转为相对 download_base 的路径，前端可拼 /downloads/{file_path} 直接访问
+	for i := range pages {
+		s.convertPageFilePathToRelative(&pages[i])
+	}
+
 	respondSuccess(c, pages)
+}
+
+// convertPageFilePathToRelative 将 Page.FilePath 从绝对路径转为相对 download_base 的路径
+func (s *Server) convertPageFilePathToRelative(page *models.Page) {
+	downloadBase := s.config.Paths.DownloadBase
+	if downloadBase == "" || page.FilePath == "" {
+		return
+	}
+	pagePath := filepath.Clean(page.FilePath)
+	downloadBase = filepath.Clean(downloadBase)
+	relPath, err := filepath.Rel(downloadBase, pagePath)
+	if err == nil {
+		page.FilePath = filepath.ToSlash(relPath)
+	}
 }
 
 // DownloadByURLRequest 通过URL下载视频的请求

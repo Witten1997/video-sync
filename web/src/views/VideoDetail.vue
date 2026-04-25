@@ -16,7 +16,7 @@
             <div class="title-actions">
               <h2>{{ video.name }}</h2>
               <el-button
-                v-if="isDownloadComplete(video.download_status) && video.valid"
+                v-if="!isGallery && isDownloadComplete(video.download_status) && video.valid"
                 type="primary"
                 size="large"
                 :icon="VideoPlay"
@@ -26,23 +26,24 @@
               </el-button>
             </div>
             <el-descriptions :column="2" border class="info-desc">
-              <el-descriptions-item label="BV号">{{ video.bvid }}</el-descriptions-item>
-              <el-descriptions-item label="UP主">{{ video.upper_name }}</el-descriptions-item>
+              <el-descriptions-item :label="isGallery ? '笔记ID' : 'BV号'">{{ video.bvid }}</el-descriptions-item>
+              <el-descriptions-item :label="isGallery ? '作者' : 'UP主'">{{ video.upper_name }}</el-descriptions-item>
               <el-descriptions-item label="发布时间">
                 {{ formatTime(video.pubtime) }}
               </el-descriptions-item>
               <el-descriptions-item label="收藏时间">
                 {{ formatTime(video.favtime) }}
               </el-descriptions-item>
-              <el-descriptions-item label="分P数量">
-                {{ video.single_page ? '单P' : `多P (${pages.length})` }}
+              <el-descriptions-item :label="isGallery ? '媒体数量' : '分P数量'">
+                <el-tag v-if="isGallery" type="warning" size="small">图文 · {{ pages.length }} 项</el-tag>
+                <span v-else>{{ video.single_page ? '单P' : `多P (${pages.length})` }}</span>
               </el-descriptions-item>
               <el-descriptions-item label="状态">
                 <el-tag v-if="!video.valid" type="danger">无效</el-tag>
                 <el-tag v-else-if="video.download_status === 0" type="info">待下载</el-tag>
                 <el-tag v-else type="success">已下载</el-tag>
               </el-descriptions-item>
-              <template v-if="video.single_page && pages[0]">
+              <template v-if="!isGallery && video.single_page && pages[0]">
                 <el-descriptions-item label="画质">
                   <el-tag v-if="qualityLabel(pages[0].quality)" :type="qualityTagType(pages[0].quality)" size="small">
                     {{ qualityLabel(pages[0].quality) }}
@@ -81,7 +82,16 @@
       </template>
     </el-card>
 
-    <el-card v-if="!video?.single_page" class="pages-card">
+    <!-- 图集（小红书图文） -->
+    <el-card v-if="isGallery" class="pages-card">
+      <template #header>
+        <span>图集（点击放大）</span>
+      </template>
+      <Gallery :pages="pages" />
+    </el-card>
+
+    <!-- 分P列表（B站多P视频） -->
+    <el-card v-else-if="!video?.single_page" class="pages-card">
       <template #header>
         <span>分P列表</span>
       </template>
@@ -152,7 +162,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { VideoPlay } from '@element-plus/icons-vue'
@@ -162,6 +172,7 @@ import { getProxiedImageUrl } from '@/utils/image'
 import type { Video, Page } from '@/types'
 import dayjs from 'dayjs'
 import VideoPlayer from '@/components/VideoPlayer.vue'
+import Gallery from '@/components/Gallery.vue'
 
 defineOptions({
   name: 'VideoDetail'
@@ -172,6 +183,9 @@ const router = useRouter()
 const loading = ref(false)
 const video = ref<Video | null>(null)
 const pages = ref<Page[]>([])
+
+// 是否为图集类型（小红书图文）
+const isGallery = computed(() => video.value?.media_kind === 'gallery')
 
 // 播放器相关
 const playerVisible = ref(false)

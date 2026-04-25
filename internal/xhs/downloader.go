@@ -116,10 +116,11 @@ func (d *Downloader) DownloadNote(ctx context.Context, note *Note, outputDir str
 					return
 				}
 				results[i] = taskResult{file: DownloadedFile{
-					Path:      dst,
-					URL:       j.url,
-					MediaType: j.mtype,
-					Size:      size,
+					Path:       dst,
+					URL:        j.url,
+					MediaType:  j.mtype,
+					Size:       size,
+					GroupIndex: j.groupIndex,
 				}}
 			}(i, j)
 		}
@@ -193,10 +194,11 @@ func (d *Downloader) DownloadNote(ctx context.Context, note *Note, outputDir str
 			size = fi.Size()
 		}
 		result.Files = append(result.Files, DownloadedFile{
-			Path:      outputFile,
-			URL:       imgFile.URL,
-			MediaType: MediaTypeLivePhoto,
-			Size:      size,
+			Path:       outputFile,
+			URL:        imgFile.URL,
+			MediaType:  MediaTypeLivePhoto,
+			Size:       size,
+			GroupIndex: imgFile.GroupIndex,
 		})
 		result.SuccessNum++
 

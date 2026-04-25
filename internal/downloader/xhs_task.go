@@ -176,6 +176,33 @@ func (dm *DownloadManager) executeXHSTask(task *DownloadTask) {
 		return
 	}
 
+	// 按 GroupIndex 更新对应 Page 的 file_path / kind / download_status
+	if dm.db != nil && video != nil {
+		var pages []models.Page
+		if err := dm.db.Where("video_id = ?", video.ID).Order("pid asc").Find(&pages).Error; err == nil {
+			pageByPID := make(map[int]*models.Page, len(pages))
+			for i := range pages {
+				pageByPID[pages[i].PID] = &pages[i]
+			}
+			for _, f := range result.Files {
+				if f.GroupIndex <= 0 {
+					continue
+				}
+				p, ok := pageByPID[f.GroupIndex]
+				if !ok {
+					continue
+				}
+				updates := map[string]interface{}{
+					"file_path":       f.Path,
+					"path":            f.Path,
+					"download_status": 1,
+					"kind":            string(f.MediaType),
+				}
+				dm.db.Model(p).Updates(updates)
+			}
+		}
+	}
+
 	var totalSize int64
 	for _, f := range result.Files {
 		totalSize += f.Size

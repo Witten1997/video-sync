@@ -58,10 +58,11 @@ type DownloadResult struct {
 
 // DownloadedFile 已下载的文件
 type DownloadedFile struct {
-	Path      string    `json:"path"`       // 本地路径
-	URL       string    `json:"url"`        // 来源URL
-	MediaType MediaType `json:"media_type"` // 媒体类型
-	Size      int64     `json:"size"`       // 文件大小（字节）
+	Path       string    `json:"path"`        // 本地路径
+	URL        string    `json:"url"`         // 来源URL
+	MediaType  MediaType `json:"media_type"`  // 媒体类型
+	Size       int64     `json:"size"`        // 文件大小（字节）
+	GroupIndex int       `json:"group_index"` // 所属媒体组序号（1-based，对应 Note.MediaItems 索引+1）
 }
 
 // ProgressCallback 下载进度回调

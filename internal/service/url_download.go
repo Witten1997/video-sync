@@ -427,10 +427,11 @@ func (s *URLDownloadService) submitXHS(ctx context.Context, req URLDownloadReque
 		PubTime:        pubTime,
 		FavTime:        time.Now(),
 		CTime:          pubTime,
-		SinglePage:     true,
+		SinglePage:     len(note.MediaItems) == 1,
 		Valid:          true,
 		ShouldDownload: true,
 		Tags:           note.Tags,
+		MediaKind:      "gallery",
 	}
 	if cover := firstImageURL(note); cover != "" {
 		video.Cover = cover
@@ -444,6 +445,28 @@ func (s *URLDownloadService) submitXHS(ctx context.Context, req URLDownloadReque
 		}
 	}
 
+	// 为每个媒体创建 Page 记录
+	for i, item := range note.MediaItems {
+		kind := pageKindFromMedia(item.Type)
+		page := models.Page{
+			VideoID:     video.ID,
+			CID:         int64(i + 1),
+			PID:         i + 1,
+			Name:        fmt.Sprintf("%s-%d", title, i+1),
+			Width:       item.Width,
+			Height:      item.Height,
+			Kind:        kind,
+			Orientation: orientationFromSize(item.Width, item.Height),
+		}
+		if err := s.db.Create(&page).Error; err != nil {
+			utils.Warn("创建小红书 Page 记录失败: %v", err)
+		}
+	}
+
+	if err := s.db.Preload("Pages").First(&video, video.ID).Error; err != nil {
+		utils.Warn("加载小红书 Pages 失败: %v", err)
+	}
+
 	task, err := s.downloadMgr.PrepareAndAddXHSTask(&video, note.OriginalURL, s.config.Paths.URLDownloadBase())
 	if err != nil {
 		return nil, &URLDownloadError{
@@ -454,6 +477,30 @@ func (s *URLDownloadService) submitXHS(ctx context.Context, req URLDownloadReque
 	}
 
 	return newURLDownloadResult(task, &video, URLDownloadSourceTypeXHS, URLDownloadOutcomeCreatedVideo), nil
+}
+
+// pageKindFromMedia 把 xhs 媒体类型映射到 Page.Kind
+func pageKindFromMedia(t xhs.MediaType) string {
+	switch t {
+	case xhs.MediaTypeImage:
+		return "image"
+	case xhs.MediaTypeVideo:
+		return "video"
+	case xhs.MediaTypeLivePhoto:
+		return "live_photo"
+	}
+	return "image"
+}
+
+// orientationFromSize 由宽高判断方向：1=横屏 2=竖屏
+func orientationFromSize(w, h int) int8 {
+	if w <= 0 || h <= 0 {
+		return 0
+	}
+	if w >= h {
+		return 1
+	}
+	return 2
 }
 
 func firstImageURL(note *xhs.Note) string {

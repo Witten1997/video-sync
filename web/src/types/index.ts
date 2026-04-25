@@ -51,6 +51,7 @@ export interface Video {
   should_download: boolean
   download_status: number
   path: string
+  media_kind?: 'video' | 'gallery'
   favorite_id?: number
   watch_later_id?: number
   collection_id?: number
@@ -77,6 +78,8 @@ export interface Page {
   image: string
   download_status: number
   path: string
+  kind?: 'video' | 'image' | 'live_photo'
+  file_path?: string
   created_at: string
 }
 

@@ -27,6 +27,7 @@ type Video struct {
 	ShouldDownload bool           `gorm:"default:true" json:"should_download"`
 	DownloadStatus int            `gorm:"default:0" json:"download_status"` // 位标志
 	Path           string         `gorm:"size:500" json:"path"`
+	MediaKind      string         `gorm:"size:20;default:'video';index" json:"media_kind"` // video | gallery
 
 	// 外键关系
 	FavoriteID   *uint `gorm:"index" json:"favorite_id,omitempty"`

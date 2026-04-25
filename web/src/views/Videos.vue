@@ -194,7 +194,8 @@
       <el-table-column prop="upper_name" label="UP主" width="150" />
       <el-table-column label="分P" width="80" align="center">
         <template #default="{ row }">
-          {{ row.single_page ? '单P' : '多P' }}
+          <el-tag v-if="row.media_kind === 'gallery'" size="small" type="warning">图文</el-tag>
+          <span v-else>{{ row.single_page ? '单P' : '多P' }}</span>
         </template>
       </el-table-column>
       <el-table-column label="画质" width="100" align="center">
@@ -268,14 +269,17 @@
             <div v-else class="image-slot-grid" @click="handleViewDetail(item)">
               <el-icon><Picture /></el-icon>
             </div>
-            <!-- 播放按钮悬浮层 -->
+            <!-- 图文角标 -->
+            <div v-if="item.media_kind === 'gallery'" class="media-kind-badge">图文</div>
+            <!-- 播放/查看按钮悬浮层 -->
             <div
               v-if="isDownloadComplete(item.download_status) && item.valid"
               class="play-overlay"
               @click="handlePlay(item)"
             >
               <el-icon :size="48" class="play-icon">
-                <VideoPlay />
+                <Picture v-if="item.media_kind === 'gallery'" />
+                <VideoPlay v-else />
               </el-icon>
             </div>
           </div>
@@ -289,7 +293,8 @@
             </div>
             <div class="grid-meta">
               <el-tag size="small" type="info">{{ item.bvid }}</el-tag>
-              <el-tag size="small">{{ item.single_page ? '单P' : '多P' }}</el-tag>
+              <el-tag v-if="item.media_kind === 'gallery'" size="small" type="warning">图文</el-tag>
+              <el-tag v-else size="small">{{ item.single_page ? '单P' : '多P' }}</el-tag>
               <el-tag v-if="item.max_quality_label" size="small" :type="qualityTagType(item.max_quality)">
                 {{ item.max_quality_label }}
               </el-tag>
@@ -460,6 +465,12 @@ const handlePlay = async (row: Video) => {
   // 检查视频是否已下载完成
   if (!isDownloadComplete(row.download_status) || !row.valid) {
     ElMessage.warning('该视频尚未下载完成，无法播放')
+    return
+  }
+
+  // 图文类型直接跳详情页（图集渲染）
+  if (row.media_kind === 'gallery') {
+    handleViewDetail(row)
     return
   }
 
@@ -756,6 +767,20 @@ onMounted(() => {
 
 .grid-cover-wrapper:hover .play-overlay {
   opacity: 1;
+}
+
+.media-kind-badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: rgba(245, 158, 11, 0.9);
+  color: #fff;
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  z-index: 2;
+  pointer-events: none;
+  font-weight: 600;
 }
 
 .play-icon {
