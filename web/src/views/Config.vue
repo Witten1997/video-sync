@@ -870,7 +870,10 @@ const updateYtdlp = async () => {
 const loadAppVersion = async () => {
   try {
     const data = await getVersionInfo()
-    appVersion.value = data
+    appVersion.value = {
+      ...appVersion.value,
+      ...data
+    }
   } catch (error) {
     console.error('获取版本信息失败:', error)
   }
@@ -880,7 +883,10 @@ const handleCheckAppVersion = async () => {
   appVersionLoading.value = true
   try {
     const data = await checkVersion()
-    appVersion.value = data
+    appVersion.value = {
+      ...appVersion.value,
+      ...data
+    }
     if (data.has_update) {
       ElMessage.success(`发现新版本 ${data.new_version}`)
     } else {

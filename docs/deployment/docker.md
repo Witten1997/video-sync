@@ -11,7 +11,7 @@ cd video-sync
 
 ### 2. 检查配置
 
-编辑 `docker-compose.yml`（如需修改端口）：
+编辑 `docker/docker-compose.yml`（如需修改端口）：
 
 ```yaml
 services:
@@ -23,19 +23,19 @@ services:
 ### 3. 启动服务
 
 ```bash
-docker-compose up -d
+docker compose -f docker/docker-compose.yml up -d
 ```
 
 ### 4. 查看日志
 
 ```bash
-docker-compose logs -f
+docker compose -f docker/docker-compose.yml logs -f
 ```
 
 ### 5. 停止服务
 
 ```bash
-docker-compose down
+docker compose -f docker/docker-compose.yml down
 ```
 
 ## 目录说明
@@ -46,7 +46,7 @@ docker-compose down
 ├── metadata/         # UP主元数据
 ├── configs/          # 配置文件
 ├── logs/             # 日志文件
-└── docker-compose.yml
+└── docker/docker-compose.yml
 ```
 
 ## 镜像说明
@@ -117,8 +117,8 @@ networks:
 ## 更新镜像
 
 ```bash
-docker-compose pull
-docker-compose up -d
+docker compose -f docker/docker-compose.yml pull
+docker compose -f docker/docker-compose.yml up -d
 ```
 
 ## 故障排查
@@ -126,23 +126,23 @@ docker-compose up -d
 ### 查看容器状态
 
 ```bash
-docker-compose ps
+docker compose -f docker/docker-compose.yml ps
 ```
 
 ### 进入容器
 
 ```bash
-docker-compose exec video-sync sh
+docker compose -f docker/docker-compose.yml exec video-sync sh
 ```
 
 ### 查看数据库
 
 ```bash
-docker-compose exec postgres psql -U bili_sync
+docker compose -f docker/docker-compose.yml exec postgres psql -U bili_sync
 ```
 
 ### 重启服务
 
 ```bash
-docker-compose restart
+docker compose -f docker/docker-compose.yml restart
 ```

@@ -79,7 +79,7 @@
 ## 目录挂载
 
 ### Docker部署
-确保 `docker-compose.yml` 已正确挂载：
+确保 `docker/docker-compose.yml` 已正确挂载：
 
 ```yaml
 volumes:

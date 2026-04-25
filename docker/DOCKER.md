@@ -37,7 +37,7 @@ bilibili:
 
 ### 2. 修改环境变量（可选）
 
-编辑 `docker-compose.yml` 文件，修改数据库密码等敏感信息：
+编辑 `docker/docker-compose.yml` 文件，修改数据库密码等敏感信息：
 
 ```yaml
 environment:
@@ -50,10 +50,10 @@ environment:
 
 ```bash
 # 构建镜像并启动容器
-docker-compose up -d --build
+docker compose -f docker/docker-compose.yml up -d --build
 
 # 查看日志
-docker-compose logs -f
+docker compose -f docker/docker-compose.yml logs -f
 
 # 查看特定服务的日志
 docker logs video-sync
@@ -67,8 +67,9 @@ docker logs video-sync
 
 ```
 video-sync/
-├── Dockerfile              # Docker 镜像构建文件
-├── docker-compose.yml      # Docker Compose 配置文件
+├── docker/
+│   ├── Dockerfile          # Docker 镜像构建文件
+│   └── docker-compose.yml  # Docker Compose 配置文件
 ├── .dockerignore          # Docker 构建忽略文件
 ├── configs/               # 配置文件目录
 │   └── config.yaml        # 应用配置文件（需手动创建）
@@ -84,10 +85,10 @@ video-sync/
 | 容器路径 | 宿主机路径 | 说明 |
 |---------|-----------|------|
 | `/var/lib/postgresql/data` | `postgres_data` 卷 | PostgreSQL 数据 |
-| `/downloads` | `./downloads` | 下载的视频文件 |
-| `/metadata` | `./metadata` | 视频元数据 |
-| `/var/log/bili-sync` | `./logs` | 应用日志 |
-| `/app/configs` | `./configs` | 配置文件 |
+| `/downloads` | `../downloads` | 下载的视频文件 |
+| `/metadata` | `../metadata` | 视频元数据 |
+| `/var/log/bili-sync` | `../logs` | 应用日志 |
+| `/app/configs` | `../configs` | 配置文件 |
 
 ## 常用命令
 
@@ -95,49 +96,49 @@ video-sync/
 
 ```bash
 # 启动服务
-docker-compose up -d
+docker compose -f docker/docker-compose.yml up -d
 
 # 查看运行状态
-docker-compose ps
+docker compose -f docker/docker-compose.yml ps
 
 # 查看日志
-docker-compose logs -f
+docker compose -f docker/docker-compose.yml logs -f
 ```
 
 ### 停止服务
 
 ```bash
 # 停止服务
-docker-compose stop
+docker compose -f docker/docker-compose.yml stop
 
 # 停止并删除容器（数据卷不会删除）
-docker-compose down
+docker compose -f docker/docker-compose.yml down
 
 # 停止并删除容器和数据卷（谨慎使用！）
-docker-compose down -v
+docker compose -f docker/docker-compose.yml down -v
 ```
 
 ### 重启服务
 
 ```bash
 # 重启服务
-docker-compose restart
+docker compose -f docker/docker-compose.yml restart
 
 # 重新构建并重启
-docker-compose up -d --build
+docker compose -f docker/docker-compose.yml up -d --build
 ```
 
 ### 查看日志
 
 ```bash
 # 查看所有日志
-docker-compose logs
+docker compose -f docker/docker-compose.yml logs
 
 # 实时查看日志
-docker-compose logs -f
+docker compose -f docker/docker-compose.yml logs -f
 
 # 查看最近 100 行日志
-docker-compose logs --tail=100
+docker compose -f docker/docker-compose.yml logs --tail=100
 
 # 进入容器查看详细日志
 docker exec -it video-sync bash
@@ -204,7 +205,7 @@ tar -czf downloads_backup_$(date +%Y%m%d_%H%M%S).tar.gz downloads/
 git pull
 
 # 重新构建并启动
-docker-compose up -d --build
+docker compose -f docker/docker-compose.yml up -d --build
 ```
 
 ### 仅更新配置
@@ -220,12 +221,12 @@ docker exec -it video-sync supervisorctl restart backend
 
 1. 查看容器日志：
 ```bash
-docker-compose logs
+docker compose -f docker/docker-compose.yml logs
 ```
 
 2. 检查容器状态：
 ```bash
-docker-compose ps
+docker compose -f docker/docker-compose.yml ps
 ```
 
 3. 检查容器内服务状态：
@@ -298,7 +299,7 @@ docker exec -it video-sync ls -la /downloads/
 
 ### 资源限制
 
-在 `docker-compose.yml` 中取消注释以下部分来限制资源使用：
+在 `docker/docker-compose.yml` 中取消注释以下部分来限制资源使用：
 
 ```yaml
 deploy:
@@ -324,7 +325,7 @@ advanced:
 
 ## 安全建议
 
-1. **修改默认密码**：务必修改 `docker-compose.yml` 中的数据库密码
+1. **修改默认密码**：务必修改 `docker/docker-compose.yml` 中的数据库密码
 2. **配置认证令牌**：在 `configs/config.yaml` 中设置 `server.auth_token`
 3. **使用 HTTPS**：在生产环境中建议使用 Nginx 反向代理配置 HTTPS
 4. **定期备份**：定期备份数据库和下载文件
@@ -334,7 +335,7 @@ advanced:
 
 ### Q: 如何修改前端端口？
 
-A: 修改 `docker-compose.yml` 中的端口映射：
+A: 修改 `docker/docker-compose.yml` 中的端口映射：
 ```yaml
 ports:
   - "8080:80"  # 将前端服务映射到 8080 端口
@@ -365,7 +366,7 @@ docker exec -it video-sync python3 -m pip install -U yt-dlp
 
 ### Q: 容器重启后数据会丢失吗？
 
-A: 不会。数据通过 Docker 卷持久化，容器重启不影响数据。只有执行 `docker-compose down -v` 才会删除数据卷。
+A: 不会。数据通过 Docker 卷持久化，容器重启不影响数据。只有执行 `docker compose -f docker/docker-compose.yml down -v` 才会删除数据卷。
 
 ## 技术支持
 

@@ -40,148 +40,6 @@
   - 标准化文件命名，适配 Emby/Jellyfin/Plex
   - 目录结构可自定义
 
-### 下载与处理
-
-- 🚀 **高效下载引擎**
-
-  - 基于 yt-dlp，稳定可靠
-  - 支持多种视频质量选择（4K/1080P/720P）
-  - 并发下载控制，合理利用带宽
-  - 自动重试机制
-- 💬 **弹幕支持**
-
-  - 自动下载 XML 弹幕文件
-  - 转换为 ASS 字幕格式
-  - 支持弹幕样式自定义
-
-### 管理与监控
-
-- 🎨 **现代化 Web 界面**
-
-  - 直观的仪表盘，一目了然
-  - 任务源可视化管理
-  - 下载任务实时监控
-  - 视频库浏览与搜索
-  - 扫码登录，配置简单
-- 📊 **数据统计**
-
-  - 下载量统计
-  - 存储空间占用分析
-  - 任务成功率监控
-
-### 部署与扩展
-
-- 🐳 **容器化部署**
-
-  - Docker 一键部署
-  - Docker Compose 多容器编排
-  - Alpine Linux 镜像，体积小巧
-  - 健康检查与自动重启
-- 🔧 **高度可配置**
-
-  - YAML 配置文件
-  - 环境变量支持
-  - 热重载配置（部分配置）
-
----
-
-## 功能状态
-
-### 已完成功能 ✅
-
-#### 核心下载功能
-
-- [X]  收藏夹视频自动同步
-- [X]  UP主全部投稿追踪下载
-- [X]  视频合集批量下载
-- [X]  单个视频快速下载
-- [X]  多种视频质量选择（4K/1080P/720P/480P）
-- [X]  断点续传支持
-- [X]  并发下载控制
-- [X]  自动重试机制
-- [X]  去重检测，避免重复下载
-
-#### 智能过滤与管理
-
-- [X]  按视频时长过滤
-- [X]  按分区过滤
-- [X]  按标题关键词过滤
-- [X]  定时扫描和自动下载
-- [X]  下载任务队列管理
-
-#### 弹幕与字幕
-
-- [X]  XML 弹幕文件下载
-- [X]  弹幕转 ASS 字幕格式
-- [X]  弹幕样式自定义
-
-#### 媒体库集成
-
-- [X]  NFO 元数据自动生成（Kodi 格式）
-- [X]  视频封面自动下载
-- [X]  UP主头像自动下载
-- [X]  标准化文件命名
-- [X]  Emby/Jellyfin 媒体服务器适配
-
-#### Web 管理界面
-
-- [X]  直观的仪表盘
-- [X]  任务源可视化管理
-- [X]  下载任务实时监控
-- [X]  视频库浏览与搜索
-- [X]  B站扫码登录
-- [X]  在线配置管理
-- [X]  热重载配置（部分配置）
-
-#### 数据统计
-
-- [X]  下载量统计
-- [X]  存储空间占用分析
-- [X]  任务成功率监控
-
-#### 部署与运维
-
-- [X]  Docker 容器化部署
-- [X]  Docker Compose 多容器编排
-- [X]  Alpine Linux 镜像优化
-- [X]  健康检查与自动重启
-- [X]  日志记录与管理
-
-### 待开发功能 🚧
-
-#### 下载增强
-
-- [ ]  视频CC字幕下载支持
-- [ ]  磁盘空间不足自动暂停
-
-#### 平台扩展
-
-- [ ]  YouTube 视频下载支持
-
-#### 通知与集成
-
-- [ ]  Telegram Bot 通知
-
-#### 高级功能
-
-- [ ]  登录功能
-- [ ]  配置迁移功能
-- [ ]  视频播放历史记录
-- [ ]  视频预览功能
-
-#### 客户端
-
-- [ ]  移动端 Web 界面优化
-
-#### 性能与优化
-
-- [ ]  下载任务智能调度
-- [ ]  带宽使用智能分配
-
-#### 媒体服务器深度集成
-
-- [ ]  下载完成后调用 Emby 自动扫描媒体库
-
 ---
 
 ## 项目预览
@@ -212,32 +70,6 @@
 
 ---
 
-## 技术栈
-
-### 后端
-
-- **语言**: Go 1.24.3+
-- **框架**: Gin (HTTP Server)
-- **数据库**: PostgreSQL 16+ with GORM
-- **配置**: Viper
-- **其他**: WebSocket 实时通信
-
-### 前端
-
-- **框架**: Vue 3 (Composition API)
-- **构建工具**: Vite 5
-- **UI 组件**: Element Plus
-- **状态管理**: Pinia
-- **图表**: ECharts
-
-### 下载工具
-
-- **下载引擎**: yt-dlp
-- **视频处理**: FFmpeg
-- **弹幕转换**: 内置转换器
-
----
-
 ## 快速开始
 
 ### 方式一：Docker Compose（推荐）
@@ -249,7 +81,7 @@ mkdir video-sync && cd video-sync
 mkdir -p configs downloads metadata logs
 ```
 
-**2. 创建 `docker-compose.yml`**
+**2. 创建 `docker/docker-compose.yml`**
 
 ```yaml
 services:
@@ -337,7 +169,7 @@ logging:
 ```
 
 > 完整配置项参考 [configs/config.example.yaml](configs/config.example.yaml)。
-> 数据库连接支持两种方式：在 `configs/config.yaml` 中配置，或通过 `docker-compose.yml` 的 `environment` 设置环境变量。环境变量优先级更高。
+> 数据库连接支持两种方式：在 `configs/config.yaml` 中配置，或通过 `docker/docker-compose.yml` 的 `environment` 设置环境变量。环境变量优先级更高。
 
 **4. 启动服务**
 
@@ -409,13 +241,13 @@ npm run dev
 
 ### Docker 部署
 
-详细的 Docker 部署说明请参考 [DOCKER.md](DOCKER.md)
+详细的 Docker 部署说明请参考 [docker/DOCKER.md](docker/DOCKER.md)
 
 **快速部署命令**：
 
 ```bash
 # 使用 Docker Compose（包含数据库）
-docker-compose up -d
+docker compose -f docker/docker-compose.yml up -d
 
 # 或者使用单独的镜像（需要自己配置数据库）
 docker run -d \
@@ -506,7 +338,7 @@ export POSTGRES_DB=video_sync
 export APP_PORT=8080
 ```
 
-Docker 部署时在 `docker-compose.yml` 中配置。
+Docker 部署时在 `docker/docker-compose.yml` 中配置。
 
 ---
 
@@ -635,8 +467,8 @@ Jellyfin 和 Plex 的配置方法类似。
 ```bash
 # Docker Compose 方式
 git pull
-docker-compose pull
-docker-compose up -d
+docker compose -f docker/docker-compose.yml pull
+docker compose -f docker/docker-compose.yml up -d
 
 # 从源码
 git pull
@@ -648,7 +480,7 @@ systemctl restart video-sync
 
 ## 文档
 
-- [Docker 部署指南](DOCKER.md) - 详细的 Docker 部署说明
+- [Docker 部署指南](docker/DOCKER.md) - 详细的 Docker 部署说明
 - [Cookie 获取教程](HOW_TO_GET_COOKIES.md) - 如何手动获取 B 站 Cookie
 
 ---
@@ -683,8 +515,9 @@ video-sync/
 ├── metadata/                # 元数据目录
 ├── logs/                    # 日志目录
 ├── migrations/              # 数据库迁移脚本
-├── Dockerfile               # Docker 镜像构建文件
-├── docker-compose.yml       # Docker Compose 配置
+├── docker/
+│   ├── Dockerfile           # Docker 镜像构建文件
+│   └── docker-compose.yml   # Docker Compose 配置
 ├── go.mod                   # Go 依赖管理
 └── README.md               # 本文档
 ```
@@ -723,19 +556,6 @@ docker build -t video-sync:latest .
 docker buildx build --platform linux/amd64,linux/arm64 -t video-sync:latest .
 ```
 
-### 代码规范
-
-```bash
-# Go 代码格式化
-go fmt ./...
-
-# Go 代码检查
-go vet ./...
-
-# 前端代码检查
-cd web && npm run lint
-```
-
 ---
 
 ## 贡献
@@ -758,7 +578,7 @@ cd web && npm run lint
 
 - [bili-sync](https://github.com/amtoaer/bili-sync) - 原项目灵感来源
 - [yt-dlp](https://github.com/yt-dlp/yt-dlp) - 强大的视频下载工具
-- [bilibili-API-collect](https://github.com/SocialSisterYi/bilibili-API-collect) - B 站 API 文档
+- [bilibili-API-collect](https://github.com/SocialSisterYi/bilibili-API-collect) - B 站 API 文档(该仓库已被作者删除)
 
 ---
 

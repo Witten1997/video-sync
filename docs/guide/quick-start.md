@@ -12,7 +12,7 @@ mkdir -p downloads metadata configs logs
 ### 2. 启动服务
 
 ```bash
-docker-compose up -d
+docker compose -f docker/docker-compose.yml up -d
 ```
 
 ### 3. 访问界面

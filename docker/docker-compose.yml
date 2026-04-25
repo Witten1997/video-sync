@@ -44,10 +44,10 @@ services:
     ports:
       - "21001:8080"
     volumes:
-      - ./downloads:/downloads
-      - ./metadata:/metadata
-      - ./logs:/var/log/video-sync
-      - ./configs:/app/configs
+      - ../downloads:/downloads
+      - ../metadata:/metadata
+      - ../logs:/var/log/video-sync
+      - ../configs:/app/configs
 
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/api/health"]
