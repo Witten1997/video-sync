@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -15,10 +16,10 @@ import (
 
 // Downloader 小红书媒体下载器
 type Downloader struct {
-	httpClient        *http.Client
-	concurrent        int  // 单笔记内并发下载数（0=串行）
-	enableLivePhoto   bool // 是否合成 Live Photo（默认 true）
-	keepLivePhotoSrc  bool // 合成 Live Photo 后是否保留原始图+视频文件（默认 false）
+	httpClient       *http.Client
+	concurrent       int  // 单笔记内并发下载数（0=串行）
+	enableLivePhoto  bool // 是否合成 Live Photo（默认 true）
+	keepLivePhotoSrc bool // 合成 Live Photo 后是否保留原始图+视频文件（默认 false）
 }
 
 // NewDownloader 创建下载器
@@ -53,18 +54,18 @@ func (d *Downloader) SetKeepLivePhotoSource(keep bool) {
 
 // downloadJob 内部下载任务
 type downloadJob struct {
-	groupIndex   int       // 媒体组序号（同组的图+视频共享）
-	url          string
-	filename     string
-	mtype        MediaType
-	livePhotoOf  *livePhotoCtx // 非空表示这是 Live Photo 的图/视频部分
+	groupIndex  int // 媒体组序号（同组的图+视频共享）
+	url         string
+	filename    string
+	mtype       MediaType
+	livePhotoOf *livePhotoCtx // 非空表示这是 Live Photo 的图/视频部分
 }
 
 // livePhotoCtx Live Photo 合成上下文
 type livePhotoCtx struct {
-	imageJob   *downloadJob
-	videoJob   *downloadJob
-	finalName  string // 最终合成文件名
+	imageJob  *downloadJob
+	videoJob  *downloadJob
+	finalName string // 最终合成文件名
 }
 
 // DownloadNote 下载笔记的全部媒体到指定目录
@@ -110,13 +111,13 @@ func (d *Downloader) DownloadNote(ctx context.Context, note *Note, outputDir str
 				defer func() { <-sem }()
 
 				dst := filepath.Join(outputDir, j.filename)
-				size, err := d.downloadFile(ctx, j.url, dst, j.filename, onProgress)
+				actualPath, size, err := d.downloadFile(ctx, j.url, dst, j.filename, onProgress)
 				if err != nil {
 					results[i] = taskResult{err: err}
 					return
 				}
 				results[i] = taskResult{file: DownloadedFile{
-					Path:       dst,
+					Path:       actualPath,
 					URL:        j.url,
 					MediaType:  j.mtype,
 					Size:       size,
@@ -180,7 +181,7 @@ func (d *Downloader) DownloadNote(ctx context.Context, note *Note, outputDir str
 		}
 
 		outputFile := filepath.Join(outputDir, lpCtx.finalName)
-		if err := CreateLivePhoto(imgFile.Path, vidFile.Path, outputFile); err != nil {
+		if err := CreateLivePhoto(ctx, imgFile.Path, vidFile.Path, outputFile); err != nil {
 			utils.Warn("Live Photo 合成失败 (%s)，保留原始文件: %v", lpCtx.finalName, err)
 			result.Files = append(result.Files, *imgFile)
 			result.Files = append(result.Files, *vidFile)
@@ -278,28 +279,29 @@ func (d *Downloader) planJobs(note *Note, baseName string) ([]downloadJob, []*li
 }
 
 // downloadFile 下载单个文件
-func (d *Downloader) downloadFile(ctx context.Context, url, dst, displayName string, onProgress ProgressCallback) (int64, error) {
+func (d *Downloader) downloadFile(ctx context.Context, url, dst, displayName string, onProgress ProgressCallback) (string, int64, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
-		return 0, fmt.Errorf("创建请求失败: %w", err)
+		return "", 0, fmt.Errorf("创建请求失败: %w", err)
 	}
 	req.Header.Set("User-Agent", userAgent)
 	req.Header.Set("Referer", "https://www.xiaohongshu.com/")
 
 	resp, err := d.httpClient.Do(req)
 	if err != nil {
-		return 0, fmt.Errorf("下载请求失败: %w", err)
+		return "", 0, fmt.Errorf("下载请求失败: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return 0, fmt.Errorf("下载状态码异常: %d (%s)", resp.StatusCode, url)
+		return "", 0, fmt.Errorf("下载状态码异常: %d (%s)", resp.StatusCode, url)
 	}
 
-	tmp := dst + ".part"
+	finalDst := resolveDownloadPath(dst, resp.Header.Get("Content-Type"))
+	tmp := finalDst + ".part"
 	f, err := os.Create(tmp)
 	if err != nil {
-		return 0, fmt.Errorf("创建文件失败: %w", err)
+		return "", 0, fmt.Errorf("创建文件失败: %w", err)
 	}
 
 	total := resp.ContentLength
@@ -310,7 +312,7 @@ func (d *Downloader) downloadFile(ctx context.Context, url, dst, displayName str
 		case <-ctx.Done():
 			f.Close()
 			os.Remove(tmp)
-			return 0, ctx.Err()
+			return "", 0, ctx.Err()
 		default:
 		}
 		n, readErr := resp.Body.Read(buf)
@@ -318,7 +320,7 @@ func (d *Downloader) downloadFile(ctx context.Context, url, dst, displayName str
 			if _, werr := f.Write(buf[:n]); werr != nil {
 				f.Close()
 				os.Remove(tmp)
-				return 0, fmt.Errorf("写入失败: %w", werr)
+				return "", 0, fmt.Errorf("写入失败: %w", werr)
 			}
 			written += int64(n)
 			if onProgress != nil {
@@ -331,18 +333,18 @@ func (d *Downloader) downloadFile(ctx context.Context, url, dst, displayName str
 		if readErr != nil {
 			f.Close()
 			os.Remove(tmp)
-			return 0, fmt.Errorf("读取响应失败: %w", readErr)
+			return "", 0, fmt.Errorf("读取响应失败: %w", readErr)
 		}
 	}
 	if err := f.Close(); err != nil {
 		os.Remove(tmp)
-		return 0, fmt.Errorf("关闭文件失败: %w", err)
+		return "", 0, fmt.Errorf("关闭文件失败: %w", err)
 	}
-	if err := os.Rename(tmp, dst); err != nil {
+	if err := os.Rename(tmp, finalDst); err != nil {
 		os.Remove(tmp)
-		return 0, fmt.Errorf("重命名文件失败: %w", err)
+		return "", 0, fmt.Errorf("重命名文件失败: %w", err)
 	}
-	return written, nil
+	return finalDst, written, nil
 }
 
 // buildBaseName 构造文件基础名
@@ -378,4 +380,54 @@ func guessExt(u, fallback string) string {
 		return "mp4"
 	}
 	return fallback
+}
+
+func resolveDownloadPath(dst, contentType string) string {
+	ext := extByContentType(contentType)
+	if ext == "" {
+		return dst
+	}
+
+	base := strings.TrimSuffix(dst, filepath.Ext(dst))
+	if base == "" {
+		return dst
+	}
+	return base + "." + ext
+}
+
+func extByContentType(contentType string) string {
+	if contentType == "" {
+		return ""
+	}
+
+	mediaType, _, err := mime.ParseMediaType(contentType)
+	if err != nil {
+		mediaType = strings.TrimSpace(strings.ToLower(contentType))
+	} else {
+		mediaType = strings.ToLower(mediaType)
+	}
+
+	switch mediaType {
+	case "image/jpeg", "image/jpg":
+		return "jpg"
+	case "image/png":
+		return "png"
+	case "image/gif":
+		return "gif"
+	case "image/webp":
+		return "webp"
+	case "image/heic":
+		return "heic"
+	case "image/heif":
+		return "heif"
+	case "image/avif":
+		return "avif"
+	case "video/mp4":
+		return "mp4"
+	case "video/quicktime":
+		return "mov"
+	case "video/webm":
+		return "webm"
+	}
+	return ""
 }
