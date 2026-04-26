@@ -107,11 +107,14 @@
         <el-table-column label="视频" min-width="280">
           <template #default="{ row }">
             <div style="display: flex; align-items: center; gap: 12px;">
-              <img
-                v-if="row.video?.cover"
-                :src="getProxiedImageUrl(row.video.cover)"
-                style="width: 80px; height: 45px; object-fit: cover; border-radius: 6px; flex-shrink: 0;"
-              />
+              <SmartImage
+                :src="getProxiedImageUrl(row.video?.cover)"
+                alt=""
+                img-style="width: 80px; height: 45px; object-fit: cover; border-radius: 6px; flex-shrink: 0;"
+                fallback-style="width: 80px; height: 45px; display: flex; align-items: center; justify-content: center; border-radius: 6px; flex-shrink: 0; background: #f8fafc; color: #94a3b8;"
+              >
+                <span class="material-icons-round" style="font-size: 20px;">image</span>
+              </SmartImage>
               <div style="min-width: 0;">
                 <div style="font-size: 13px; font-weight: 500; color: #1e293b; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
                   {{ row.video?.name || '-' }}
@@ -185,6 +188,7 @@ import type { DownloadRecord } from '@/types'
 import { useAuthStore } from '@/stores/auth'
 import { getProxiedImageUrl } from '@/utils/image'
 import { useRoute } from 'vue-router'
+import SmartImage from '@/components/SmartImage.vue'
 
 const records = ref<DownloadRecord[]>([])
 const loading = ref(false)

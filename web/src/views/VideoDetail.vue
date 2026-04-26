@@ -10,7 +10,14 @@
       <template v-if="video">
         <el-row :gutter="20">
           <el-col :span="8">
-            <el-image :src="getProxiedImageUrl(video.cover, false)" fit="cover" style="width: 100%; border-radius: 8px" />
+            <SmartImage
+              :src="getProxiedImageUrl(video.cover, false)"
+              alt=""
+              img-style="width: 100%; border-radius: 8px; display: block;"
+              fallback-style="width: 100%; aspect-ratio: 16 / 9; display: flex; align-items: center; justify-content: center; border-radius: 8px; background: #f8fafc; color: #94a3b8;"
+            >
+              <span class="material-icons-round" style="font-size: 28px;">image</span>
+            </SmartImage>
           </el-col>
           <el-col :span="16">
             <div class="title-actions">
@@ -173,6 +180,7 @@ import type { Video, Page } from '@/types'
 import dayjs from 'dayjs'
 import VideoPlayer from '@/components/VideoPlayer.vue'
 import Gallery from '@/components/Gallery.vue'
+import SmartImage from '@/components/SmartImage.vue'
 
 defineOptions({
   name: 'VideoDetail'

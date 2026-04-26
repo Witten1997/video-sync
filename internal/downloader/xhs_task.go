@@ -179,6 +179,7 @@ func (dm *DownloadManager) executeXHSTask(task *DownloadTask) {
 	// 按 GroupIndex 更新对应 Page 的 file_path / kind / download_status
 	if dm.db != nil && video != nil {
 		var pages []models.Page
+		firstCoverPath := ""
 		if err := dm.db.Where("video_id = ?", video.ID).Order("pid asc").Find(&pages).Error; err == nil {
 			pageByPID := make(map[int]*models.Page, len(pages))
 			for i := range pages {
@@ -199,8 +200,18 @@ func (dm *DownloadManager) executeXHSTask(task *DownloadTask) {
 					"kind":            string(f.MediaType),
 				}
 				dm.db.Model(p).Updates(updates)
+				if f.GroupIndex == 1 && firstCoverPath == "" {
+					firstCoverPath = f.Path
+				}
 			}
 		}
+		videoUpdates := map[string]interface{}{
+			"download_status": 1,
+		}
+		if firstCoverPath != "" {
+			videoUpdates["cover"] = firstCoverPath
+		}
+		dm.db.Model(video).Updates(videoUpdates)
 	}
 
 	var totalSize int64
@@ -224,11 +235,6 @@ func (dm *DownloadManager) executeXHSTask(task *DownloadTask) {
 					"status":       "completed",
 					"completed_at": now,
 				})
-		}
-		if video != nil {
-			dm.db.Model(video).Updates(map[string]interface{}{
-				"download_status": 1,
-			})
 		}
 	}
 	utils.Info("小红书笔记下载完成: [%s], 成功 %d, 失败 %d", video.Name, result.SuccessNum, result.FailedNum)

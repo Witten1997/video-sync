@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	"bili-download/internal/database/models"
 	"bili-download/internal/service"
@@ -130,8 +131,10 @@ func (s *Server) handleListVideos(c *gin.Context) {
 	//}
 
 	// 将所有视频的绝对路径转换为相对路径
+	s.attachGalleryFirstPageCovers(videos)
 	for i := range videos {
 		s.convertVideoPathToRelative(&videos[i])
+		s.convertVideoCoverPathToURL(&videos[i])
 	}
 
 	// 查询每个视频的最高画质并拼装到响应
@@ -200,6 +203,7 @@ func (s *Server) handleGetVideo(c *gin.Context) {
 
 	// 将绝对路径转换为相对路径（用于前端播放）
 	s.convertVideoPathToRelative(&video)
+	s.convertVideoCoverPathToURL(&video)
 
 	respondSuccess(c, video)
 }
@@ -322,15 +326,11 @@ func (s *Server) handleGetVideoPages(c *gin.Context) {
 
 // convertPageFilePathToRelative 将 Page.FilePath 从绝对路径转为相对 download_base 的路径
 func (s *Server) convertPageFilePathToRelative(page *models.Page) {
-	downloadBase := s.config.Paths.DownloadBase
-	if downloadBase == "" || page.FilePath == "" {
+	if page.FilePath == "" {
 		return
 	}
-	pagePath := filepath.Clean(page.FilePath)
-	downloadBase = filepath.Clean(downloadBase)
-	relPath, err := filepath.Rel(downloadBase, pagePath)
-	if err == nil {
-		page.FilePath = filepath.ToSlash(relPath)
+	if relPath, ok := s.relativeToDownloadBase(page.FilePath); ok {
+		page.FilePath = relPath
 	}
 }
 
@@ -382,6 +382,15 @@ func (s *Server) resolveVideoCoverPaths(video *models.Video) {
 	}
 
 	// 处理视频级别的封面（用于列表显示）
+	if video.MediaKind == "gallery" {
+		for i := range video.Pages {
+			if video.Pages[i].FilePath != "" {
+				video.Cover = video.Pages[i].FilePath
+				break
+			}
+		}
+	}
+
 	if video.SinglePage && len(video.Pages) > 0 {
 		// 单P视频：检查视频级别的封面文件
 		localPosterPath := s.findLocalVideoPoster(downloadDir, video)
@@ -602,6 +611,14 @@ func (s *Server) handleImageProxy(c *gin.Context) {
 
 // convertVideoPathToRelative 将视频的绝对路径转换为相对路径（相对于 download_base）
 func (s *Server) convertVideoPathToRelative(video *models.Video) {
+	if video.Path == "" {
+		return
+	}
+	if relPath, ok := s.relativeToDownloadBase(video.Path); ok {
+		video.Path = relPath
+		return
+	}
+
 	downloadBase := s.config.Paths.DownloadBase
 	if downloadBase == "" || video.Path == "" {
 		return
@@ -618,4 +635,107 @@ func (s *Server) convertVideoPathToRelative(video *models.Video) {
 		relPath = filepath.ToSlash(relPath)
 		video.Path = relPath
 	}
+}
+
+func (s *Server) convertVideoCoverPathToURL(video *models.Video) {
+	if video.Cover == "" || strings.HasPrefix(video.Cover, "/downloads/") {
+		return
+	}
+	if relPath, ok := s.relativeToDownloadBase(video.Cover); ok {
+		video.Cover = "/downloads/" + relPath
+		return
+	}
+
+	downloadBase := s.config.Paths.DownloadBase
+	if downloadBase == "" || video.Cover == "" || strings.HasPrefix(video.Cover, "/downloads/") {
+		return
+	}
+
+	coverPath := filepath.Clean(video.Cover)
+	downloadBase = filepath.Clean(downloadBase)
+	relPath, err := filepath.Rel(downloadBase, coverPath)
+	if err != nil || strings.HasPrefix(relPath, "..") {
+		return
+	}
+
+	video.Cover = "/downloads/" + filepath.ToSlash(relPath)
+}
+
+func (s *Server) attachGalleryFirstPageCovers(videos []models.Video) {
+	if len(videos) == 0 {
+		return
+	}
+
+	videoIndex := make(map[uint]*models.Video, len(videos))
+	videoIDs := make([]uint, 0, len(videos))
+	for i := range videos {
+		if videos[i].MediaKind != "gallery" {
+			continue
+		}
+		videoIndex[videos[i].ID] = &videos[i]
+		videoIDs = append(videoIDs, videos[i].ID)
+	}
+	if len(videoIDs) == 0 {
+		return
+	}
+
+	var pages []models.Page
+	if err := s.db.Where("video_id IN ? AND file_path <> ''", videoIDs).Order("video_id asc, pid asc").Find(&pages).Error; err != nil {
+		return
+	}
+
+	seen := make(map[uint]struct{}, len(videoIDs))
+	for _, page := range pages {
+		if _, ok := seen[page.VideoID]; ok {
+			continue
+		}
+		video, ok := videoIndex[page.VideoID]
+		if !ok {
+			continue
+		}
+		video.Cover = page.FilePath
+		seen[page.VideoID] = struct{}{}
+	}
+}
+
+func (s *Server) relativeToDownloadBase(path string) (string, bool) {
+	cleanedPath := filepath.Clean(path)
+	lowerPath := strings.ToLower(filepath.ToSlash(strings.TrimSpace(path)))
+	if strings.HasPrefix(lowerPath, "http://") || strings.HasPrefix(lowerPath, "https://") || strings.HasPrefix(lowerPath, "//") {
+		return "", false
+	}
+	if !filepath.IsAbs(cleanedPath) {
+		if cleanedPath == "." || cleanedPath == "" || strings.HasPrefix(cleanedPath, "..") {
+			return "", false
+		}
+		return filepath.ToSlash(cleanedPath), true
+	}
+	for _, base := range s.downloadBases() {
+		relPath, err := filepath.Rel(base, cleanedPath)
+		if err != nil || strings.HasPrefix(relPath, "..") {
+			continue
+		}
+		return filepath.ToSlash(relPath), true
+	}
+	return "", false
+}
+
+func (s *Server) downloadBases() []string {
+	bases := make([]string, 0, 2)
+	appendBase := func(path string) {
+		if path == "" {
+			return
+		}
+		cleaned := filepath.Clean(path)
+		for _, existing := range bases {
+			if existing == cleaned {
+				return
+			}
+		}
+		bases = append(bases, cleaned)
+	}
+
+	appendBase(s.config.Paths.DownloadBase)
+	appendBase(s.config.Paths.URLDownloadBase())
+	return bases
 }

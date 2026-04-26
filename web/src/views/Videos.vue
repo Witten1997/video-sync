@@ -171,18 +171,16 @@
       <el-table-column type="selection" width="55" align="center" />
       <el-table-column label="封面" width="150">
         <template #default="{ row }">
-          <img
-            v-if="row.cover"
+          <SmartImage
             :src="getProxiedImageUrl(row.cover)"
-            loading="lazy"
-            decoding="async"
+            alt=""
             width="120"
             height="68"
-            style="width: 120px; height: 68px; object-fit: cover; border-radius: 4px; display: block;"
-          />
-          <div v-else class="image-slot">
+            img-style="width: 120px; height: 68px; object-fit: cover; border-radius: 4px; display: block;"
+            fallback-class="image-slot"
+          >
             <el-icon><Picture /></el-icon>
-          </div>
+          </SmartImage>
         </template>
       </el-table-column>
       <el-table-column prop="name" label="标题" min-width="300">
@@ -257,18 +255,16 @@
       <div v-for="item in videos" :key="item.id" class="grid-item">
         <el-card :body-style="{ padding: '0px' }" shadow="hover">
           <div class="grid-cover-wrapper">
-            <img
-              v-if="item.cover"
+            <SmartImage
               :src="getProxiedImageUrl(item.cover)"
-              loading="lazy"
-              decoding="async"
-              class="grid-cover"
+              alt=""
+              img-class="grid-cover"
+              img-style="cursor: pointer"
+              fallback-class="image-slot-grid"
               @click="handleViewDetail(item)"
-              style="cursor: pointer"
-            />
-            <div v-else class="image-slot-grid" @click="handleViewDetail(item)">
+            >
               <el-icon><Picture /></el-icon>
-            </div>
+            </SmartImage>
             <!-- 图文角标 -->
             <div v-if="item.media_kind === 'gallery'" class="media-kind-badge">图文</div>
             <!-- 播放/查看按钮悬浮层 -->
@@ -359,6 +355,7 @@ import { qualityTagType } from '@/utils/quality'
 import type { Video, VideoSource } from '@/types'
 import dayjs from 'dayjs'
 import VideoPlayer from '@/components/VideoPlayer.vue'
+import SmartImage from '@/components/SmartImage.vue'
 
 defineOptions({
   name: 'Videos'

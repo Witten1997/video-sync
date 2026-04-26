@@ -1,6 +1,5 @@
 <template>
   <div class="gallery">
-    <!-- 九宫格 -->
     <div class="gallery-grid">
       <div
         v-for="(item, idx) in items"
@@ -8,7 +7,6 @@
         class="gallery-item"
         @click="handleItemClick(item, idx)"
       >
-        <!-- 缩略图：图片 / Live Photo / 视频海报（视频用第一张图占位） -->
         <img
           v-if="item.thumbUrl"
           :src="item.thumbUrl"
@@ -20,24 +18,20 @@
           <el-icon :size="32"><Picture /></el-icon>
         </div>
 
-        <!-- 类型角标 -->
         <div class="gallery-badge" :class="badgeClass(item.kind)">
           <span v-if="item.kind === 'video'">视频</span>
           <span v-else-if="item.kind === 'live_photo'">Live</span>
           <span v-else>图</span>
         </div>
 
-        <!-- 视频播放图标遮罩 -->
         <div v-if="item.kind === 'video'" class="gallery-play-overlay">
           <el-icon :size="40"><VideoPlay /></el-icon>
         </div>
 
-        <!-- 序号 -->
         <div class="gallery-index">{{ item.pid }}</div>
       </div>
     </div>
 
-    <!-- 图片预览（el-image 的预览能力） -->
     <el-image-viewer
       v-if="previewVisible"
       :url-list="previewList"
@@ -47,7 +41,6 @@
       @close="previewVisible = false"
     />
 
-    <!-- 视频弹窗播放 -->
     <el-dialog
       v-model="videoDialogVisible"
       :title="currentVideoName"
@@ -68,16 +61,18 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { Picture, VideoPlay } from '@element-plus/icons-vue'
 import type { Page } from '@/types'
+import { decodeHeicToObjectUrl, isHeicLikeUrl } from '@/utils/heic'
 
 interface GalleryItem {
   id: number
   pid: number
   kind: 'image' | 'video' | 'live_photo'
-  thumbUrl: string  // 缩略图 URL（图片/LivePhoto 用本身；视频暂用空）
-  fullUrl: string   // 完整 URL（图片放大用；视频播放用）
+  sourceUrl: string
+  thumbUrl: string
+  fullUrl: string
   name: string
 }
 
@@ -85,66 +80,122 @@ const props = defineProps<{
   pages: Page[]
 }>()
 
-// 把 page.file_path 转成 /downloads/{file_path}（已是相对 download_base 的路径）
+const items = ref<GalleryItem[]>([])
+const previewVisible = ref(false)
+const previewIndex = ref(0)
+const videoDialogVisible = ref(false)
+const currentVideoUrl = ref('')
+const currentVideoName = ref('')
+const objectUrls = new Set<string>()
+const heicUrlCache = new Map<string, Promise<string>>()
+let buildVersion = 0
+
 function buildURL(filePath?: string): string {
   if (!filePath) return ''
   const cleaned = filePath.replace(/^\/+/, '')
   return `/downloads/${cleaned}`
 }
 
-const items = computed<GalleryItem[]>(() => {
-  return props.pages
-    .filter((p) => !!p.file_path)
-    .map((p) => {
-      const kind = (p.kind || 'image') as GalleryItem['kind']
-      const url = buildURL(p.file_path)
-      // 视频缩略图暂用 page.image，没有则空
-      const thumbUrl = kind === 'video' ? (p.image || '') : url
+async function resolveMediaUrl(url: string): Promise<string> {
+  if (!url || !isHeicLikeUrl(url)) {
+    return url
+  }
+
+  let task = heicUrlCache.get(url)
+  if (!task) {
+    task = decodeHeicToObjectUrl(url).then((objectUrl) => {
+      objectUrls.add(objectUrl)
+      return objectUrl
+    })
+    heicUrlCache.set(url, task)
+  }
+
+  try {
+    return await task
+  } catch (error) {
+    console.error('HEIC 图片解码失败:', error)
+    return url
+  }
+}
+
+async function rebuildItems() {
+  const version = ++buildVersion
+  const nextItems = props.pages
+    .filter((page) => !!page.file_path)
+    .map((page) => {
+      const kind = (page.kind || 'image') as GalleryItem['kind']
+      const sourceUrl = buildURL(page.file_path)
+      const isHeic = kind !== 'video' && isHeicLikeUrl(sourceUrl)
+
       return {
-        id: p.id,
-        pid: p.pid,
+        id: page.id,
+        pid: page.pid,
         kind,
-        thumbUrl,
-        fullUrl: url,
-        name: p.name || `media-${p.pid}`,
+        sourceUrl,
+        thumbUrl: kind === 'video' ? (page.image || '') : (isHeic ? '' : sourceUrl),
+        fullUrl: sourceUrl,
+        name: page.name || `media-${page.pid}`,
       }
     })
-})
 
-// 仅图片/Live Photo 进预览列表（视频走弹窗）
+  items.value = nextItems
+
+  for (const item of nextItems) {
+    if (version !== buildVersion) {
+      return
+    }
+    if (item.kind === 'video' || !isHeicLikeUrl(item.sourceUrl)) {
+      continue
+    }
+
+    void resolveMediaUrl(item.sourceUrl).then((resolvedUrl) => {
+      if (version !== buildVersion) {
+        return
+      }
+
+      const target = items.value.find((current) => current.id === item.id)
+      if (!target) {
+        return
+      }
+
+      target.thumbUrl = resolvedUrl
+      target.fullUrl = resolvedUrl
+    })
+  }
+}
+
 const previewList = computed(() => {
   return items.value
-    .filter((it) => it.kind !== 'video')
-    .map((it) => it.fullUrl)
+    .filter((item) => item.kind !== 'video')
+    .map((item) => item.fullUrl)
 })
 
-// 在 previewList 中查找指定 item 的索引
 function findPreviewIndex(target: GalleryItem): number {
   let n = 0
-  for (const it of items.value) {
-    if (it.kind === 'video') continue
-    if (it.id === target.id) return n
+  for (const item of items.value) {
+    if (item.kind === 'video') continue
+    if (item.id === target.id) return n
     n++
   }
   return 0
 }
 
-const previewVisible = ref(false)
-const previewIndex = ref(0)
-
-const videoDialogVisible = ref(false)
-const currentVideoUrl = ref('')
-const currentVideoName = ref('')
-
-function handleItemClick(item: GalleryItem, _idx: number) {
+async function handleItemClick(item: GalleryItem, _idx: number) {
   if (item.kind === 'video') {
     currentVideoUrl.value = item.fullUrl
     currentVideoName.value = item.name
     videoDialogVisible.value = true
-  } else {
-    previewIndex.value = findPreviewIndex(item)
-    previewVisible.value = true
+    return
   }
+
+  if (isHeicLikeUrl(item.sourceUrl) && item.fullUrl === item.sourceUrl) {
+    const resolvedUrl = await resolveMediaUrl(item.sourceUrl)
+    item.thumbUrl = resolvedUrl
+    item.fullUrl = resolvedUrl
+  }
+
+  previewIndex.value = findPreviewIndex(item)
+  previewVisible.value = true
 }
 
 function badgeClass(kind: string) {
@@ -157,6 +208,20 @@ function badgeClass(kind: string) {
       return 'badge-image'
   }
 }
+
+watch(
+  () => props.pages,
+  () => {
+    void rebuildItems()
+  },
+  { immediate: true }
+)
+
+onBeforeUnmount(() => {
+  for (const url of objectUrls) {
+    URL.revokeObjectURL(url)
+  }
+})
 </script>
 
 <style scoped>

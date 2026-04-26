@@ -78,6 +78,19 @@ func (s *Server) handleListDownloadRecords(c *gin.Context) {
 		return
 	}
 
+	videos := make([]models.Video, 0, len(records))
+	for _, record := range records {
+		videos = append(videos, record.Video)
+	}
+	s.attachGalleryFirstPageCovers(videos)
+	for i := range records {
+		if i < len(videos) {
+			records[i].Video.Cover = videos[i].Cover
+		}
+		s.convertVideoCoverPathToURL(&records[i].Video)
+		s.convertVideoPathToRelative(&records[i].Video)
+	}
+
 	respondSuccess(c, gin.H{
 		"items":       records,
 		"total":       total,
@@ -104,6 +117,12 @@ func (s *Server) handleGetDownloadRecord(c *gin.Context) {
 		respondInternalError(c, err)
 		return
 	}
+
+	videoSlice := []models.Video{record.Video}
+	s.attachGalleryFirstPageCovers(videoSlice)
+	record.Video.Cover = videoSlice[0].Cover
+	s.convertVideoCoverPathToURL(&record.Video)
+	s.convertVideoPathToRelative(&record.Video)
 
 	respondSuccess(c, record)
 }
