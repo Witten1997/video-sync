@@ -9,7 +9,7 @@
     <el-card v-loading="loading" class="detail-card">
       <template v-if="video">
         <el-row :gutter="20">
-          <el-col :span="8">
+          <el-col :span="isGallery ? 4 : 8">
             <SmartImage
               :src="getProxiedImageUrl(video.cover, false)"
               alt=""
@@ -19,7 +19,7 @@
               <span class="material-icons-round" style="font-size: 28px;">image</span>
             </SmartImage>
           </el-col>
-          <el-col :span="16">
+          <el-col :span="isGallery ? 20 : 16">
             <div class="title-actions">
               <h2>{{ video.name }}</h2>
               <el-button

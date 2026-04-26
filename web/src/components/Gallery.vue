@@ -5,17 +5,20 @@
         v-for="(item, idx) in items"
         :key="item.id"
         class="gallery-item"
+        :style="itemStyle(item)"
         @click="handleItemClick(item, idx)"
       >
-        <img
-          v-if="item.thumbUrl"
-          :src="item.thumbUrl"
-          :alt="`media-${item.pid}`"
-          loading="lazy"
-          class="gallery-thumb"
-        />
-        <div v-else class="gallery-thumb-placeholder">
-          <el-icon :size="32"><Picture /></el-icon>
+        <div class="gallery-media">
+          <img
+            v-if="item.thumbUrl"
+            :src="item.thumbUrl"
+            :alt="`media-${item.pid}`"
+            loading="lazy"
+            class="gallery-thumb"
+          />
+          <div v-else class="gallery-thumb-placeholder">
+            <el-icon :size="32"><Picture /></el-icon>
+          </div>
         </div>
 
         <div class="gallery-badge" :class="badgeClass(item.kind)">
@@ -74,12 +77,15 @@ interface GalleryItem {
   thumbUrl: string
   fullUrl: string
   name: string
+  width: number
+  height: number
 }
 
 const props = defineProps<{
   pages: Page[]
 }>()
 
+const GALLERY_ITEM_HEIGHT = 300
 const items = ref<GalleryItem[]>([])
 const previewVisible = ref(false)
 const previewIndex = ref(0)
@@ -135,6 +141,8 @@ async function rebuildItems() {
         thumbUrl: kind === 'video' ? (page.image || '') : (isHeic ? '' : sourceUrl),
         fullUrl: sourceUrl,
         name: page.name || `media-${page.pid}`,
+        width: page.width || 0,
+        height: page.height || 0,
       }
     })
 
@@ -209,6 +217,13 @@ function badgeClass(kind: string) {
   }
 }
 
+function itemStyle(item: GalleryItem) {
+  const ratio = item.width > 0 && item.height > 0 ? item.width / item.height : 1
+  return {
+    width: `${Math.max(Math.round(GALLERY_ITEM_HEIGHT * ratio), 120)}px`,
+  }
+}
+
 watch(
   () => props.pages,
   () => {
@@ -230,31 +245,36 @@ onBeforeUnmount(() => {
 }
 
 .gallery-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 8px;
 }
 
 @media (min-width: 1024px) {
   .gallery-grid {
-    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
   }
 }
 
 @media (min-width: 1400px) {
   .gallery-grid {
-    grid-template-columns: repeat(5, 1fr);
+    gap: 8px;
   }
 }
 
 .gallery-item {
+  flex: 0 0 auto;
   position: relative;
-  aspect-ratio: 1 / 1;
   overflow: hidden;
   border-radius: 8px;
   background: #f1f5f9;
   cursor: pointer;
   transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.gallery-media {
+  height: 300px;
 }
 
 .gallery-item:hover {
@@ -265,7 +285,6 @@ onBeforeUnmount(() => {
 .gallery-thumb {
   width: 100%;
   height: 100%;
-  object-fit: cover;
   display: block;
 }
 
