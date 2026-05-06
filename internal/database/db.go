@@ -31,7 +31,7 @@ func Connect(cfg *config.Config) (*gorm.DB, error) {
 
 	// 配置 GORM
 	gormConfig := &gorm.Config{
-		Logger: logger.Default.LogMode(logger.Info),
+		Logger: logger.Default.LogMode(logger.Warn),
 		NowFunc: func() time.Time {
 			return time.Now().UTC()
 		},

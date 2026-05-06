@@ -34,7 +34,7 @@ func normalizeLivePhotoImage(ctx context.Context, imagePath string) (string, fun
 		_ = os.Remove(tmpPath)
 	}
 
-	jpegBytes, goErr := convertToJPEG(imagePath)
+	jpegBytes, goErr := convertToJPEG(imagePath, 95)
 	if goErr == nil {
 		if err := os.WriteFile(tmpPath, jpegBytes, 0644); err != nil {
 			cleanup()
@@ -131,8 +131,8 @@ func runFFmpeg(ctx context.Context, args ...string) error {
 	return fmt.Errorf("执行 ffmpeg 失败: %w: %s", err, msg)
 }
 
-// convertToJPEG 将任意支持的图片格式（JPEG/PNG/GIF/WebP）解码并重新编码为 JPEG 字节
-func convertToJPEG(imagePath string) ([]byte, error) {
+// convertToJPEG 将任意支持的图片格式（JPEG/PNG/GIF/WebP/HEIC）解码并重新编码为 JPEG 字节
+func convertToJPEG(imagePath string, quality int) ([]byte, error) {
 	f, err := os.Open(imagePath)
 	if err != nil {
 		return nil, err
@@ -145,7 +145,7 @@ func convertToJPEG(imagePath string) ([]byte, error) {
 	}
 
 	var buf bytes.Buffer
-	if err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: 95}); err != nil {
+	if err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: quality}); err != nil {
 		return nil, fmt.Errorf("编码 JPEG 失败: %w", err)
 	}
 	return buf.Bytes(), nil

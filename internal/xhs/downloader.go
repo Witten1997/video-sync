@@ -116,6 +116,17 @@ func (d *Downloader) DownloadNote(ctx context.Context, note *Note, outputDir str
 					results[i] = taskResult{err: err}
 					return
 				}
+
+				// HEIC/HEIF 自动转 JPEG，避免前端解码卡顿
+				if j.mtype == MediaTypeImage {
+					if normPath, normSize, convErr := normalizeImageHEIC(ctx, actualPath); convErr != nil {
+						utils.Warn("HEIC 转 JPEG 失败 (%s): %v", actualPath, convErr)
+					} else {
+						actualPath = normPath
+						size = normSize
+					}
+				}
+
 				results[i] = taskResult{file: DownloadedFile{
 					Path:       actualPath,
 					URL:        j.url,
