@@ -243,6 +243,9 @@ func (s *Server) setupRouter() {
 		// 图片代理（用于解决B站防盗链问题）
 		api.GET("/image-proxy", s.handleImageProxy)
 
+		// Live Photo 视频流（从合成 JPEG 中切出尾部 mp4）
+		api.GET("/pages/:id/live-video", s.handleGetPageLiveVideo)
+
 		// 维护工具
 		maintenance := api.Group("/maintenance")
 		{
@@ -505,6 +508,12 @@ func (s *Server) authMiddleware() gin.HandlerFunc {
 
 		// 跳过公开接口
 		if path == "/api/health" || path == "/api/auth/login" || path == "/api/image-proxy" || path == "/api/version" {
+			c.Next()
+			return
+		}
+
+		// Live Photo 视频流：/api/pages/:id/live-video
+		if strings.HasPrefix(path, "/api/pages/") && strings.HasSuffix(path, "/live-video") {
 			c.Next()
 			return
 		}

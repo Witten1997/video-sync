@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -10,6 +11,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 
 	"bili-download/internal/database/models"
 	"bili-download/internal/service"
@@ -738,4 +740,117 @@ func (s *Server) downloadBases() []string {
 	appendBase(s.config.Paths.DownloadBase)
 	appendBase(s.config.Paths.URLDownloadBase())
 	return bases
+}
+
+var livePhotoOffsetCache sync.Map // key: "path|size|mtime" -> int64 mp4 起始偏移
+
+// handleGetPageLiveVideo 从 Live Photo 合成 JPEG 文件中切出尾部 mp4 流式返回
+// 支持 Range，可直接作为 <video> 的 src
+func (s *Server) handleGetPageLiveVideo(c *gin.Context) {
+	idStr := c.Param("id")
+	id, err := strconv.ParseUint(idStr, 10, 32)
+	if err != nil {
+		respondValidationError(c, "无效的分P ID")
+		return
+	}
+
+	var page models.Page
+	if err := s.db.First(&page, id).Error; err != nil {
+		respondError(c, http.StatusNotFound, "分P不存在")
+		return
+	}
+	if page.Kind != "live_photo" {
+		respondValidationError(c, "该分P不是 Live Photo")
+		return
+	}
+	if page.FilePath == "" {
+		respondError(c, http.StatusNotFound, "Live Photo 文件路径为空")
+		return
+	}
+
+	absPath := page.FilePath
+	if !filepath.IsAbs(absPath) {
+		for _, base := range s.downloadBases() {
+			candidate := filepath.Join(base, absPath)
+			if _, err := os.Stat(candidate); err == nil {
+				absPath = candidate
+				break
+			}
+		}
+	}
+
+	f, err := os.Open(absPath)
+	if err != nil {
+		respondError(c, http.StatusNotFound, "Live Photo 文件不存在")
+		return
+	}
+	defer f.Close()
+
+	stat, err := f.Stat()
+	if err != nil {
+		respondInternalError(c, err)
+		return
+	}
+
+	cacheKey := fmt.Sprintf("%s|%d|%d", absPath, stat.Size(), stat.ModTime().UnixNano())
+	var mp4Start int64 = -1
+	if v, ok := livePhotoOffsetCache.Load(cacheKey); ok {
+		mp4Start = v.(int64)
+	} else {
+		off, err := findMP4FtypOffset(f)
+		if err != nil {
+			respondError(c, http.StatusUnprocessableEntity, "未在文件中找到 mp4 数据: "+err.Error())
+			return
+		}
+		mp4Start = off
+		livePhotoOffsetCache.Store(cacheKey, mp4Start)
+	}
+
+	mp4Size := stat.Size() - mp4Start
+	if mp4Size <= 0 {
+		respondError(c, http.StatusUnprocessableEntity, "mp4 数据长度异常")
+		return
+	}
+
+	section := io.NewSectionReader(f, mp4Start, mp4Size)
+	c.Header("Content-Type", "video/mp4")
+	c.Header("Accept-Ranges", "bytes")
+	c.Header("Cache-Control", "private, max-age=3600")
+	name := strings.TrimSuffix(filepath.Base(absPath), filepath.Ext(absPath)) + ".mp4"
+	http.ServeContent(c.Writer, c.Request, name, stat.ModTime(), section)
+}
+
+// findMP4FtypOffset 在文件中查找首个 mp4 ftyp box 的起始偏移
+// mp4 box header: [size:4 BE][type:4 ascii]，type=="ftyp" 标识 mp4 起点
+// 返回值是 size 字段的起始位置（即 ftyp 偏移 - 4）
+func findMP4FtypOffset(f *os.File) (int64, error) {
+	if _, err := f.Seek(0, io.SeekStart); err != nil {
+		return 0, err
+	}
+
+	const chunkSize = 256 * 1024
+	const overlap = 8 // 跨块边界保留长度，覆盖 4 字节 size + 4 字节 "ftyp"
+	buf := make([]byte, chunkSize+overlap)
+	var basePos int64
+	tail := 0 // buf 中已保留的尾部字节数
+
+	for {
+		n, err := io.ReadFull(f, buf[tail:])
+		total := tail + n
+		if total >= 4 {
+			idx := bytes.Index(buf[:total], []byte("ftyp"))
+			if idx >= 4 {
+				return basePos + int64(idx) - 4, nil
+			}
+		}
+		if err == io.EOF || err == io.ErrUnexpectedEOF {
+			return 0, fmt.Errorf("ftyp 标记未找到")
+		}
+		if err != nil {
+			return 0, err
+		}
+		copy(buf, buf[total-overlap:total])
+		basePos += int64(total - overlap)
+		tail = overlap
+	}
 }

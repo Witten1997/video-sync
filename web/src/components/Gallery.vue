@@ -31,6 +31,10 @@
           <el-icon :size="40"><VideoPlay /></el-icon>
         </div>
 
+        <div v-else-if="item.kind === 'live_photo'" class="gallery-live-overlay">
+          <el-icon :size="32"><VideoPlay /></el-icon>
+        </div>
+
         <div class="gallery-index">{{ item.pid }}</div>
       </div>
     </div>
@@ -196,6 +200,13 @@ async function handleItemClick(item: GalleryItem, _idx: number) {
     return
   }
 
+  if (item.kind === 'live_photo') {
+    currentVideoUrl.value = `/api/pages/${item.id}/live-video`
+    currentVideoName.value = item.name
+    videoDialogVisible.value = true
+    return
+  }
+
   if (isHeicLikeUrl(item.sourceUrl) && item.fullUrl === item.sourceUrl) {
     const resolvedUrl = await resolveMediaUrl(item.sourceUrl)
     item.thumbUrl = resolvedUrl
@@ -331,6 +342,24 @@ onBeforeUnmount(() => {
   background: rgba(0, 0, 0, 0.3);
   color: #fff;
   z-index: 1;
+}
+
+.gallery-live-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  background: rgba(0, 0, 0, 0);
+  opacity: 0;
+  transition: opacity 0.2s ease, background 0.2s ease;
+  z-index: 1;
+}
+
+.gallery-item:hover .gallery-live-overlay {
+  opacity: 1;
+  background: rgba(0, 0, 0, 0.25);
 }
 
 .gallery-index {
