@@ -24,6 +24,10 @@ type Page struct {
 	FilePath       string    `gorm:"size:500" json:"file_path"`               // 单文件落地路径（图集场景使用）
 	CreatedAt      time.Time `json:"created_at"`
 
+	// 非持久化字段：由文件系统 stat 填充，仅响应时返回
+	FileSize   int64  `gorm:"-" json:"file_size,omitempty"`
+	ModifiedAt string `gorm:"-" json:"modified_at,omitempty"`
+
 	// 关联
 	Video Video `gorm:"foreignKey:VideoID;constraint:OnDelete:CASCADE" json:"video,omitempty"`
 }

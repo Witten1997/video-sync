@@ -39,13 +39,11 @@
       </div>
     </div>
 
-    <el-image-viewer
-      v-if="previewVisible"
-      :url-list="previewList"
-      :initial-index="previewIndex"
-      :hide-on-click-modal="true"
-      :z-index="3000"
-      @close="previewVisible = false"
+    <ImageViewer
+      v-model:visible="viewerVisible"
+      v-model:index="viewerIndex"
+      :items="viewerItems"
+      @deleted="onPageDeleted"
     />
 
     <el-dialog
@@ -72,6 +70,7 @@ import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { Picture, VideoPlay } from '@element-plus/icons-vue'
 import type { Page } from '@/types'
 import { decodeHeicToObjectUrl, isHeicLikeUrl } from '@/utils/heic'
+import ImageViewer, { type ViewerItem } from './ImageViewer.vue'
 
 interface GalleryItem {
   id: number
@@ -83,16 +82,23 @@ interface GalleryItem {
   name: string
   width: number
   height: number
+  file_path?: string
+  file_size?: number
+  modified_at?: string
 }
 
 const props = defineProps<{
   pages: Page[]
 }>()
 
+const emit = defineEmits<{
+  (e: 'page-deleted', id: number): void
+}>()
+
 const GALLERY_ITEM_HEIGHT = 300
 const items = ref<GalleryItem[]>([])
-const previewVisible = ref(false)
-const previewIndex = ref(0)
+const viewerVisible = ref(false)
+const viewerIndex = ref(0)
 const videoDialogVisible = ref(false)
 const currentVideoUrl = ref('')
 const currentVideoName = ref('')
@@ -147,6 +153,9 @@ async function rebuildItems() {
         name: page.name || `media-${page.pid}`,
         width: page.width || 0,
         height: page.height || 0,
+        file_path: page.file_path,
+        file_size: page.file_size,
+        modified_at: page.modified_at,
       }
     })
 
@@ -176,13 +185,24 @@ async function rebuildItems() {
   }
 }
 
-const previewList = computed(() => {
+const viewerItems = computed<ViewerItem[]>(() => {
   return items.value
     .filter((item) => item.kind !== 'video')
-    .map((item) => item.fullUrl)
+    .map((item) => ({
+      id: item.id,
+      pid: item.pid,
+      kind: item.kind as 'image' | 'live_photo',
+      fullUrl: item.fullUrl,
+      name: item.name,
+      width: item.width,
+      height: item.height,
+      file_path: item.file_path,
+      file_size: item.file_size,
+      modified_at: item.modified_at,
+    }))
 })
 
-function findPreviewIndex(target: GalleryItem): number {
+function findViewerIndex(target: GalleryItem): number {
   let n = 0
   for (const item of items.value) {
     if (item.kind === 'video') continue
@@ -200,21 +220,19 @@ async function handleItemClick(item: GalleryItem, _idx: number) {
     return
   }
 
-  if (item.kind === 'live_photo') {
-    currentVideoUrl.value = `/api/pages/${item.id}/live-video`
-    currentVideoName.value = item.name
-    videoDialogVisible.value = true
-    return
-  }
-
   if (isHeicLikeUrl(item.sourceUrl) && item.fullUrl === item.sourceUrl) {
     const resolvedUrl = await resolveMediaUrl(item.sourceUrl)
     item.thumbUrl = resolvedUrl
     item.fullUrl = resolvedUrl
   }
 
-  previewIndex.value = findPreviewIndex(item)
-  previewVisible.value = true
+  viewerIndex.value = findViewerIndex(item)
+  viewerVisible.value = true
+}
+
+function onPageDeleted(id: number) {
+  items.value = items.value.filter((item) => item.id !== id)
+  emit('page-deleted', id)
 }
 
 function badgeClass(kind: string) {

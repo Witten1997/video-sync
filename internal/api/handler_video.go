@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"bili-download/internal/database/models"
 	"bili-download/internal/service"
@@ -320,10 +321,34 @@ func (s *Server) handleGetVideoPages(c *gin.Context) {
 
 	// 将 file_path 转为相对 download_base 的路径，前端可拼 /downloads/{file_path} 直接访问
 	for i := range pages {
+		s.fillPageFileStat(&pages[i])
 		s.convertPageFilePathToRelative(&pages[i])
 	}
 
 	respondSuccess(c, pages)
+}
+
+// fillPageFileStat 通过 os.Stat 填充 FileSize 与 ModifiedAt（文件不存在时静默忽略）
+func (s *Server) fillPageFileStat(page *models.Page) {
+	if page.FilePath == "" {
+		return
+	}
+	absPath := page.FilePath
+	if !filepath.IsAbs(absPath) {
+		for _, base := range s.downloadBases() {
+			candidate := filepath.Join(base, absPath)
+			if st, err := os.Stat(candidate); err == nil {
+				page.FileSize = st.Size()
+				page.ModifiedAt = st.ModTime().Format(time.RFC3339)
+				return
+			}
+		}
+		return
+	}
+	if st, err := os.Stat(absPath); err == nil {
+		page.FileSize = st.Size()
+		page.ModifiedAt = st.ModTime().Format(time.RFC3339)
+	}
 }
 
 // convertPageFilePathToRelative 将 Page.FilePath 从绝对路径转为相对 download_base 的路径
@@ -853,4 +878,44 @@ func findMP4FtypOffset(f *os.File) (int64, error) {
 		basePos += int64(total - overlap)
 		tail = overlap
 	}
+}
+
+// handleDeletePage 删除分P：先删本地文件，再删 DB 记录
+func (s *Server) handleDeletePage(c *gin.Context) {
+	idStr := c.Param("id")
+	id, err := strconv.ParseUint(idStr, 10, 32)
+	if err != nil {
+		respondValidationError(c, "无效的分P ID")
+		return
+	}
+
+	var page models.Page
+	if err := s.db.First(&page, id).Error; err != nil {
+		respondError(c, http.StatusNotFound, "分P不存在")
+		return
+	}
+
+	if page.FilePath != "" {
+		absPath := page.FilePath
+		if !filepath.IsAbs(absPath) {
+			for _, base := range s.downloadBases() {
+				candidate := filepath.Join(base, absPath)
+				if _, err := os.Stat(candidate); err == nil {
+					absPath = candidate
+					break
+				}
+			}
+		}
+		if err := os.Remove(absPath); err != nil && !os.IsNotExist(err) {
+			respondError(c, http.StatusInternalServerError, "删除文件失败: "+err.Error())
+			return
+		}
+	}
+
+	if err := s.db.Delete(&models.Page{}, id).Error; err != nil {
+		respondInternalError(c, err)
+		return
+	}
+
+	respondSuccess(c, gin.H{"deleted": true})
 }

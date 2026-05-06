@@ -246,6 +246,9 @@ func (s *Server) setupRouter() {
 		// Live Photo 视频流（从合成 JPEG 中切出尾部 mp4）
 		api.GET("/pages/:id/live-video", s.handleGetPageLiveVideo)
 
+		// 删除分P（删本地文件 + DB 记录）
+		api.DELETE("/pages/:id", s.handleDeletePage)
+
 		// 维护工具
 		maintenance := api.Group("/maintenance")
 		{

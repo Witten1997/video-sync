@@ -43,3 +43,8 @@ export const downloadVideoByURL = (url: string) => {
     message: string
   }>('/videos/download-by-url', { url })
 }
+
+// 删除分P（删本地文件 + DB 记录）
+export const deletePage = (id: number) => {
+  return http.delete<{ deleted: boolean }>(`/pages/${id}`)
+}

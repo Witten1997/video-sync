@@ -80,6 +80,8 @@ export interface Page {
   path: string
   kind?: 'video' | 'image' | 'live_photo'
   file_path?: string
+  file_size?: number
+  modified_at?: string
   created_at: string
 }
 
