@@ -22,7 +22,7 @@ func NewHTTPClient(proxyCfg config.ProxyConfig, timeout time.Duration, maxIdleCo
 // NewHTTPTransport 根据代理配置创建 HTTP Transport
 func NewHTTPTransport(proxyCfg config.ProxyConfig, maxIdleConns, maxIdleConnsPerHost int) *http.Transport {
 	transport := &http.Transport{
-		Proxy:                 http.ProxyFromEnvironment,
+		Proxy:                 nil,
 		MaxIdleConns:          maxIdleConns,
 		MaxIdleConnsPerHost:   maxIdleConnsPerHost,
 		IdleConnTimeout:       90 * time.Second,

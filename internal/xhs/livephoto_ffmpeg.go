@@ -34,28 +34,28 @@ func normalizeLivePhotoImage(ctx context.Context, imagePath string) (string, fun
 		_ = os.Remove(tmpPath)
 	}
 
-	jpegBytes, goErr := convertToJPEG(imagePath, 95)
-	if goErr == nil {
-		if err := os.WriteFile(tmpPath, jpegBytes, 0644); err != nil {
-			cleanup()
-			return "", nil, fmt.Errorf("写入临时 JPEG 失败: %w", err)
-		}
+	// 优先用 ffmpeg：产物自带 APP0 JFIF + APP2 ICC 段，结构与华为相机/萌制作一致；
+	// Go 的 jpeg.Encode 出的是裸 JPEG（无 APP0 JFIF 段），部分严格的解析器会拒绝识别。
+	ffmpegErr := convertImageToJPEGWithFFmpeg(ctx, imagePath, tmpPath)
+	if ffmpegErr == nil {
 		return tmpPath, cleanup, nil
 	}
 
-	ffmpegErr := convertImageToJPEGWithFFmpeg(ctx, imagePath, tmpPath)
-	if ffmpegErr != nil {
+	jpegBytes, goErr := convertToJPEG(imagePath, 95)
+	if goErr != nil {
 		cleanup()
-		return "", nil, fmt.Errorf("Go 转 JPEG 失败: %v; ffmpeg 转 JPEG 失败: %w", goErr, ffmpegErr)
+		return "", nil, fmt.Errorf("ffmpeg 转 JPEG 失败: %v; Go 转 JPEG 失败: %w", ffmpegErr, goErr)
+	}
+	if err := os.WriteFile(tmpPath, jpegBytes, 0644); err != nil {
+		cleanup()
+		return "", nil, fmt.Errorf("写入临时 JPEG 失败: %w", err)
 	}
 	return tmpPath, cleanup, nil
 }
 
 func normalizeMotionVideo(ctx context.Context, videoPath string) (string, func(), error) {
-	if strings.EqualFold(filepath.Ext(videoPath), ".mp4") {
-		return videoPath, func() {}, nil
-	}
-
+	// 不再对 .mp4 直接透传：xhs 的 live 图视频通常没有音轨，但华为相册要求
+	// live photo 的 mp4 必须含音频轨道，所以一定要走 ffmpeg 重新封装+补一条静音 AAC 音轨。
 	tmpFile, err := os.CreateTemp("", "xhs-live-motion-*.mp4")
 	if err != nil {
 		return "", nil, fmt.Errorf("创建临时 MP4 文件失败: %w", err)
@@ -92,30 +92,6 @@ func convertImageToJPEGWithFFmpeg(ctx context.Context, src, dst string) error {
 	)
 }
 
-func remuxMotionVideoToMP4(ctx context.Context, src, dst string) error {
-	return runFFmpeg(ctx,
-		"-i", src,
-		"-map", "0:v:0",
-		"-map", "0:a:0?",
-		"-c", "copy",
-		"-movflags", "+faststart",
-		dst,
-	)
-}
-
-func transcodeMotionVideoToMP4(ctx context.Context, src, dst string) error {
-	return runFFmpeg(ctx,
-		"-i", src,
-		"-map", "0:v:0",
-		"-map", "0:a:0?",
-		"-c:v", "libx264",
-		"-pix_fmt", "yuv420p",
-		"-c:a", "aac",
-		"-movflags", "+faststart",
-		dst,
-	)
-}
-
 func runFFmpeg(ctx context.Context, args ...string) error {
 	cmdArgs := append([]string{"-hide_banner", "-loglevel", "error", "-y"}, args...)
 	cmd := exec.CommandContext(ctx, "ffmpeg", cmdArgs...)
@@ -123,12 +99,72 @@ func runFFmpeg(ctx context.Context, args ...string) error {
 	if err == nil {
 		return nil
 	}
-
 	msg := strings.TrimSpace(string(out))
 	if msg == "" {
 		return fmt.Errorf("执行 ffmpeg 失败: %w", err)
 	}
 	return fmt.Errorf("执行 ffmpeg 失败: %w: %s", err, msg)
+}
+
+// remuxMotionVideoToMP4 用流拷贝重封装为 mp4。华为相册要求 live photo 的 mp4 必须包含音频
+// 轨道，否则不识别——所以源没有音轨时注入一段静音 AAC。
+func remuxMotionVideoToMP4(ctx context.Context, src, dst string) error {
+	// 路径 A：源带音轨，整体 -c copy
+	if err := runFFmpeg(ctx,
+		"-i", src,
+		"-map", "0:v:0",
+		"-map", "0:a:0",
+		"-c", "copy",
+		"-movflags", "+faststart",
+		dst,
+	); err == nil {
+		return nil
+	}
+	// 路径 B：源无音轨，注入静音
+	return runFFmpeg(ctx,
+		"-i", src,
+		"-f", "lavfi",
+		"-i", "anullsrc=channel_layout=stereo:sample_rate=44100",
+		"-map", "0:v:0",
+		"-map", "1:a:0",
+		"-shortest",
+		"-c:v", "copy",
+		"-c:a", "aac",
+		"-b:a", "128k",
+		"-movflags", "+faststart",
+		dst,
+	)
+}
+
+// transcodeMotionVideoToMP4 转码为 H.264+AAC mp4，作为 remux 失败的兜底；同样保证有音轨。
+func transcodeMotionVideoToMP4(ctx context.Context, src, dst string) error {
+	if err := runFFmpeg(ctx,
+		"-i", src,
+		"-map", "0:v:0",
+		"-map", "0:a:0",
+		"-c:v", "libx264",
+		"-pix_fmt", "yuv420p",
+		"-c:a", "aac",
+		"-b:a", "128k",
+		"-movflags", "+faststart",
+		dst,
+	); err == nil {
+		return nil
+	}
+	return runFFmpeg(ctx,
+		"-i", src,
+		"-f", "lavfi",
+		"-i", "anullsrc=channel_layout=stereo:sample_rate=44100",
+		"-map", "0:v:0",
+		"-map", "1:a:0",
+		"-shortest",
+		"-c:v", "libx264",
+		"-pix_fmt", "yuv420p",
+		"-c:a", "aac",
+		"-b:a", "128k",
+		"-movflags", "+faststart",
+		dst,
+	)
 }
 
 // convertToJPEG 将任意支持的图片格式（JPEG/PNG/GIF/WebP/HEIC）解码并重新编码为 JPEG 字节

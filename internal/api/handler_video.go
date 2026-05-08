@@ -264,6 +264,11 @@ func (s *Server) handleDeleteVideo(c *gin.Context) {
 		// 继续删除数据库记录，即使文件删除失败
 	}
 
+	// 删除关联的下载记录
+	if err := s.db.Where("video_id = ?", id).Delete(&models.DownloadRecord{}).Error; err != nil {
+		utils.Warn("删除下载记录失败: %v", err)
+	}
+
 	// 删除视频（会级联删除相关的分P）
 	if err := s.db.Delete(&models.Video{}, id).Error; err != nil {
 		respondInternalError(c, err)
@@ -538,34 +543,53 @@ func fileExists(path string) bool {
 
 // deleteLocalFiles 删除视频相关的本地文件
 func (s *Server) deleteLocalFiles(video *models.Video) error {
-	downloadDir := s.config.Paths.DownloadBase
-	if downloadDir == "" {
-		return nil
+	// 1) 优先按 video.Path（真实下载目录，gallery / ytdlp / 普通视频均会写入）
+	if p := strings.TrimSpace(video.Path); p != "" {
+		if !filepath.IsAbs(p) {
+			for _, base := range s.downloadBases() {
+				candidate := filepath.Join(base, p)
+				if info, err := os.Stat(candidate); err == nil && info.IsDir() {
+					if err := os.RemoveAll(candidate); err != nil {
+						return fmt.Errorf("删除视频文件夹失败: %w", err)
+					}
+					utils.Info("已删除视频文件夹: %s", candidate)
+					return nil
+				}
+			}
+		} else if info, err := os.Stat(p); err == nil && info.IsDir() {
+			if err := os.RemoveAll(p); err != nil {
+				return fmt.Errorf("删除视频文件夹失败: %w", err)
+			}
+			utils.Info("已删除视频文件夹: %s", p)
+			return nil
+		}
 	}
 
+	// 2) 兜底：按 Filenamify(video.Name) 在所有 download base 下找
 	videoName := utils.Filenamify(video.Name)
-	// 视频文件夹路径
-	videoFolder := filepath.Join(downloadDir, videoName)
-
-	// 检查文件夹是否存在
-	info, err := os.Stat(videoFolder)
-	if os.IsNotExist(err) {
-		utils.Info("视频文件夹不存在: %s", videoFolder)
+	if videoName == "" {
 		return nil
 	}
-	if err != nil {
-		return fmt.Errorf("检查视频文件夹失败: %w", err)
-	}
-	if !info.IsDir() {
-		return fmt.Errorf("路径不是文件夹: %s", videoFolder)
+	for _, base := range s.downloadBases() {
+		if base == "" {
+			continue
+		}
+		videoFolder := filepath.Join(base, videoName)
+		info, err := os.Stat(videoFolder)
+		if err != nil {
+			continue
+		}
+		if !info.IsDir() {
+			continue
+		}
+		if err := os.RemoveAll(videoFolder); err != nil {
+			return fmt.Errorf("删除视频文件夹失败: %w", err)
+		}
+		utils.Info("已删除视频文件夹: %s", videoFolder)
+		return nil
 	}
 
-	// 直接删除整个视频文件夹
-	if err := os.RemoveAll(videoFolder); err != nil {
-		return fmt.Errorf("删除视频文件夹失败: %w", err)
-	}
-
-	utils.Info("已删除视频文件夹: %s", videoFolder)
+	utils.Info("视频文件夹不存在: %s", video.Path)
 	return nil
 }
 

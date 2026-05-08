@@ -1,22 +1,17 @@
 package xhs
 
 import (
+	"bytes"
 	"context"
-	"encoding/binary"
 	"fmt"
 	"io"
 	"os"
-	"strings"
 )
 
-// CreateLivePhoto 将图片+视频合成为 Android Live Photo（Google MotionPhoto / 小米 MicroVideo 格式）
+// CreateLivePhoto 将图片+视频合成为 Android Live Photo（"动态照片"）。
 //
-// 实现原理：
-//  1. 把任意格式的图片解码并重新编码为 JPEG（保证容器一致）
-//  2. 在 JPEG 的 SOI(0xFFD8) 之后插入一个 APP1 段，内含 XMP 元数据，标注视频段长度
-//  3. 把视频文件字节直接拼接到 JPEG 末尾
-//
-// 输出文件本身仍是合法 JPEG（任何看图软件都能打开），支持 Live Photo 的相册会识别尾部视频
+// 实现：把任意格式的图片标准化成 JPEG，把视频标准化成 MP4，然后字节级拼接（cover.jpg 后追加 motion.mp4）。
+// 实测华为相册的识别只看"JPG 末尾紧跟一段合法 MP4"这个结构特征，不依赖任何 EXIF / XMP / mdta 元数据。
 func CreateLivePhoto(ctx context.Context, imagePath, videoPath, outputPath string) error {
 	normalizedImagePath, cleanupImage, err := normalizeLivePhotoImage(ctx, imagePath)
 	if err != nil {
@@ -34,29 +29,21 @@ func CreateLivePhoto(ctx context.Context, imagePath, videoPath, outputPath strin
 	if err != nil {
 		return fmt.Errorf("读取标准化 JPEG 失败: %w", err)
 	}
+	if len(jpegBytes) < 2 || jpegBytes[0] != 0xFF || jpegBytes[1] != 0xD8 {
+		return fmt.Errorf("无效的 JPEG 头部")
+	}
+	// 确保有 APP0 JFIF 段。ffmpeg 把 webp/png 等非 JPEG 源转成 jpg 时
+	// 不会自动写 JFIF 段，导致华为相册等严格解析器拒绝识别为正常 JPEG。
+	jpegBytes = ensureJFIFAPP0(jpegBytes)
 
 	videoInfo, err := os.Stat(normalizedVideoPath)
 	if err != nil {
 		return fmt.Errorf("读取标准化视频失败: %w", err)
 	}
-	videoSize := videoInfo.Size()
-	if videoSize <= 0 {
+	mp4Size := videoInfo.Size()
+	if mp4Size <= 0 {
 		return fmt.Errorf("视频文件为空: %s", normalizedVideoPath)
 	}
-
-	xmpSegment, err := buildXMPSegment(videoSize)
-	if err != nil {
-		return fmt.Errorf("构造 XMP 段失败: %w", err)
-	}
-
-	// 在 JPEG 头部 (SOI 后) 插入 XMP APP1 段
-	if len(jpegBytes) < 2 || jpegBytes[0] != 0xFF || jpegBytes[1] != 0xD8 {
-		return fmt.Errorf("无效的 JPEG 头部")
-	}
-	merged := make([]byte, 0, len(jpegBytes)+len(xmpSegment))
-	merged = append(merged, jpegBytes[:2]...)
-	merged = append(merged, xmpSegment...)
-	merged = append(merged, jpegBytes[2:]...)
 
 	out, err := os.Create(outputPath)
 	if err != nil {
@@ -64,8 +51,13 @@ func CreateLivePhoto(ctx context.Context, imagePath, videoPath, outputPath strin
 	}
 	defer out.Close()
 
-	if _, err := out.Write(merged); err != nil {
+	if _, err := out.Write(jpegBytes); err != nil {
 		return fmt.Errorf("写入 JPEG 失败: %w", err)
+	}
+
+	// 16 字节 0 padding：与已验证的 test_G 样本对齐，避免边角解析差异。
+	if _, err := out.Write(make([]byte, 16)); err != nil {
+		return fmt.Errorf("写入 padding 失败: %w", err)
 	}
 
 	video, err := os.Open(normalizedVideoPath)
@@ -77,40 +69,43 @@ func CreateLivePhoto(ctx context.Context, imagePath, videoPath, outputPath strin
 	if _, err := io.Copy(out, video); err != nil {
 		return fmt.Errorf("追加视频失败: %w", err)
 	}
+
+	// 40 字节 LIVE footer：华为相册识别动态照片的私有魔法尾。
+	// 格式：<W:H 空格补到 20 字节><LIVE_<mp4字节数> 空格补到 20 字节>
+	// W:H 数值不参与校验（真机文件也写不匹配的值），mp4 字节数必须等于追加的 mp4 长度。
+	if _, err := out.Write(buildHuaweiLiveFooter(mp4Size)); err != nil {
+		return fmt.Errorf("写入 LIVE footer 失败: %w", err)
+	}
 	return nil
 }
 
-// buildXMPSegment 构造一个包含 GCamera/MicroVideo 元数据的 JPEG APP1 段
-//
-// JPEG APP1 段格式：
-//   FF E1 [length:2 bytes BE] [namespace] 00 [payload...]
-// 其中 length 包含自身两字节，但不包含 FFE1 标记。
-//
-// XMP 命名空间标识："http://ns.adobe.com/xap/1.0/\0"
-func buildXMPSegment(videoSize int64) ([]byte, error) {
-	xmpPayload := buildXMPPayload(videoSize)
-
-	const xmpNamespace = "http://ns.adobe.com/xap/1.0/\x00"
-	body := xmpNamespace + xmpPayload
-
-	// 段长度 = 2(长度本身) + len(body)
-	totalLen := 2 + len(body)
-	if totalLen > 0xFFFF {
-		return nil, fmt.Errorf("XMP 段过大: %d 字节，超过 JPEG APP1 上限", totalLen)
-	}
-
-	seg := make([]byte, 0, 4+len(body))
-	seg = append(seg, 0xFF, 0xE1)
-	lenBytes := make([]byte, 2)
-	binary.BigEndian.PutUint16(lenBytes, uint16(totalLen))
-	seg = append(seg, lenBytes...)
-	seg = append(seg, []byte(body)...)
-	return seg, nil
+func buildHuaweiLiveFooter(mp4Size int64) []byte {
+	footer := bytes.Repeat([]byte{' '}, 40)
+	copy(footer[:20], []byte("1024:542"))
+	copy(footer[20:], []byte(fmt.Sprintf("LIVE_%d", mp4Size)))
+	return footer
 }
 
-// buildXMPPayload 生成 XMP RDF 文本，覆盖 GCamera/Container/小米三种命名空间
-// 兼容性：Google Pixel/相册、小米相册、OPPO 部分机型
-func buildXMPPayload(videoSize int64) string {
-	const tpl = `<x:xmpmeta xmlns:x="adobe:ns:meta/" x:xmptk="XHS-LivePhoto"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"><rdf:Description rdf:about="" xmlns:GCamera="http://ns.google.com/photos/1.0/camera/" xmlns:OpCamera="http://ns.oplus.com/photos/1.0/camera/" xmlns:MiCamera="http://ns.xiaomi.com/photos/1.0/camera/" xmlns:Container="http://ns.google.com/photos/1.0/container/" xmlns:Item="http://ns.google.com/photos/1.0/container/item/" xmlns:xmpNote="http://ns.adobe.com/xmp/note/" GCamera:MotionPhoto="1" GCamera:MotionPhotoVersion="1" GCamera:MotionPhotoPresentationTimestampUs="0" OpCamera:MotionPhotoPrimaryPresentationTimestampUs="0" OpCamera:MotionPhotoOwner="xhs" OpCamera:OLivePhotoVersion="2" OpCamera:VideoLength="%d" GCamera:MicroVideoVersion="1" GCamera:MicroVideo="1" GCamera:MicroVideoOffset="%d" GCamera:MicroVideoPresentationTimestampUs="0" MiCamera:XMPMeta="&lt;?xml version='1.0' encoding='UTF-8' standalone='yes' ?&gt;"><Container:Directory><rdf:Seq><rdf:li rdf:parseType="Resource"><Container:Item Item:Mime="image/jpeg" Item:Semantic="Primary" Item:Length="0" Item:Padding="0"/></rdf:li><rdf:li rdf:parseType="Resource"><Container:Item Item:Mime="video/mp4" Item:Semantic="MotionPhoto" Item:Length="%d"/></rdf:li></rdf:Seq></Container:Directory></rdf:Description></rdf:RDF></x:xmpmeta>`
-	return strings.Replace(fmt.Sprintf(tpl, videoSize, videoSize, videoSize), "\n", "", -1)
+// ensureJFIFAPP0 检查 SOI 后是否有 APP0 'JFIF' 段，没有就在 SOI 之后插入一个标准
+// JFIF 段（version 1.02, no units, density 96x96, 无缩略图）。
+func ensureJFIFAPP0(data []byte) []byte {
+	if len(data) < 4 || data[0] != 0xFF || data[1] != 0xD8 {
+		return data
+	}
+	// 查紧跟 SOI 的下一个 marker
+	if data[2] == 0xFF && data[3] == 0xE0 && len(data) >= 11 && string(data[6:10]) == "JFIF" {
+		return data
+	}
+	jfif := []byte{
+		0xFF, 0xE0, 0x00, 0x10,
+		'J', 'F', 'I', 'F', 0x00,
+		0x01, 0x02, 0x00,
+		0x00, 0x60, 0x00, 0x60,
+		0x00, 0x00,
+	}
+	out := make([]byte, 0, len(data)+len(jfif))
+	out = append(out, data[:2]...)
+	out = append(out, jfif...)
+	out = append(out, data[2:]...)
+	return out
 }
