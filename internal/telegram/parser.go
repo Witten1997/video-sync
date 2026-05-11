@@ -3,6 +3,8 @@ package telegram
 import (
 	"regexp"
 	"strings"
+
+	"bili-download/internal/xhs"
 )
 
 var urlPattern = regexp.MustCompile(`https?://[^\s]+`)
@@ -94,6 +96,13 @@ func parseURLText(text string, maxURLs int, command bool) ParseResult {
 }
 
 func parseDirectURLMessage(text string, maxURLs int) ParseResult {
+	if xhsURL := xhs.ExtractURL(text); xhsURL != "" {
+		if !strings.HasPrefix(xhsURL, "http") {
+			xhsURL = "https://" + xhsURL
+		}
+		return ParseResult{Kind: ParseResultKindSubmit, URL: xhsURL}
+	}
+
 	result := parseURLText(text, maxURLs, false)
 	if result.Kind != ParseResultKindSubmit {
 		return result

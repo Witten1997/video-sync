@@ -1,6 +1,9 @@
 package telegram
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestExtractURLsSupportsDirectMessageAndCommand(t *testing.T) {
 	t.Parallel()
@@ -67,6 +70,31 @@ func TestParseMessageRequiresBareDirectURL(t *testing.T) {
 	result := ParseMessage("please download https://example.com/video", 1)
 	if result.Kind != ParseResultKindIgnore {
 		t.Fatalf("expected ignore result for non-bare direct URL, got %q", result.Kind)
+	}
+}
+
+func TestParseMessageAcceptsXHSShareText(t *testing.T) {
+	t.Parallel()
+
+	share := "74 【🌼Garden Hour· . ꔫ ˖* - coin. | 小红书 - 你的生活兴趣社区】 😆 TgSzSoMjWoLU5aV 😆 https://www.xiaohongshu.com/discovery/item/69e327ee0000000023022f52?source=webshare&xhsshare=pc_web&xsec_token=ABM4haVtJ7iugeFWCGLc89nkU0xcyfXmtzi1U1nwHjlY4=&xsec_source=pc_share"
+	result := ParseMessage(share, 1)
+	if result.Kind != ParseResultKindSubmit {
+		t.Fatalf("expected submit for XHS share text, got %q", result.Kind)
+	}
+	if !strings.HasPrefix(result.URL, "https://www.xiaohongshu.com/discovery/item/69e327ee") {
+		t.Fatalf("unexpected extracted url: %q", result.URL)
+	}
+}
+
+func TestParseMessageAcceptsXHSShortLinkInText(t *testing.T) {
+	t.Parallel()
+
+	result := ParseMessage("看看这个 http://xhslink.com/a/AbCdEf 笔记", 1)
+	if result.Kind != ParseResultKindSubmit {
+		t.Fatalf("expected submit for XHS short link in text, got %q", result.Kind)
+	}
+	if !strings.Contains(result.URL, "xhslink.com/a/AbCdEf") {
+		t.Fatalf("unexpected extracted url: %q", result.URL)
 	}
 }
 
