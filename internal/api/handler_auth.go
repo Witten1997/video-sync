@@ -126,6 +126,12 @@ func (s *Server) saveCredentialToConfig(credential *bilibili.Credential) error {
 	s.config = newConfig
 	s.biliClient.UpdateConfig(newConfig)
 	s.refreshHTTPClients()
+	if s.downloadMgr != nil {
+		s.downloadMgr.UpdateConfig(newConfig)
+	}
+	if s.scheduler != nil {
+		s.scheduler.UpdateConfig(newConfig)
+	}
 
 	return nil
 }
