@@ -676,7 +676,6 @@ func (st *SyncTask) updateSourceHealth(sourceID, sourceType string, success bool
 		updates := map[string]interface{}{
 			"consecutive_failures": currentFailures,
 			"health_status":        healthStatus,
-			"last_scan_at":         now,
 			"last_scan_error":      errorMsg,
 		}
 
