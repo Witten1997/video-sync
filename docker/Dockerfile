@@ -32,7 +32,7 @@ COPY web/frontend.go ./web/
 COPY --from=frontend-builder /app/web/dist ./web/dist/
 
 ARG VERSION=1.0.0
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo \
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -tags nodynamic \
     -ldflags="-w -s -X 'bili-download/internal/version.Version=${VERSION}' -X 'bili-download/internal/version.GitTag=${VERSION}' -X 'bili-download/internal/version.BuildTime=$(TZ=Asia/Shanghai date +%Y-%m-%d\ %H:%M:%S)'" \
     -o /app/video-sync ./cmd/server
 

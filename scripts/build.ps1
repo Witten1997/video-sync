@@ -1,4 +1,4 @@
-# 打包命令为 powershell scripts/build.ps1 0.1.2
+# 打包命令为 powershell scripts/build.ps1 0.3.5
 
 $ErrorActionPreference = "Stop"
 
@@ -39,7 +39,7 @@ foreach ($t in $targets) {
     $env:CGO_ENABLED = "0"
     $env:GOOS = $os
     $env:GOARCH = $arch
-    go build -ldflags="$LdFlags" -o "$OutputDir/$bin" ./cmd/server
+    go build -tags nodynamic -ldflags="$LdFlags" -o "$OutputDir/$bin" ./cmd/server
 
     $archive = "video-sync-$Version-$os-$arch.tar.gz"
     Write-Host "--- Packaging $archive ---"
