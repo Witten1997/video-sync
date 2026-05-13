@@ -37,6 +37,7 @@ type ProgressInfo struct {
 // SubTaskProgress 子任务进度
 type SubTaskProgress struct {
 	Name           string         `json:"name"`            // 子任务名称（video, poster, nfo, danmaku, subtitle, upper）
+	Label          string         `json:"label"`           // 显示标签（动态，留空则不更新）
 	Status         DownloadStatus `json:"status"`          // 下载状态
 	Progress       float64        `json:"progress"`        // 进度百分比 (0-100)
 	Speed          float64        `json:"speed"`           // 下载速度 (bytes/sec)

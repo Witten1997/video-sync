@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
+	"sync"
 	"time"
 
 	"bili-download/internal/database/models"
@@ -102,9 +104,10 @@ func (dm *DownloadManager) executeXHSTask(task *DownloadTask) {
 
 	video := task.Video
 
-	notifyStatus := func(taskName string, status DownloadStatus, progress float64, downloaded, total int64) {
+	notifyLabeled := func(taskName, label string, status DownloadStatus, progress float64, downloaded, total int64) {
 		dm.tracker.NotifyProgress(video.ID, 0, taskName, &SubTaskProgress{
 			Name:           taskName,
+			Label:          label,
 			Status:         status,
 			Progress:       progress,
 			DownloadedSize: downloaded,
@@ -112,7 +115,7 @@ func (dm *DownloadManager) executeXHSTask(task *DownloadTask) {
 		})
 	}
 
-	notifyStatus("video", StatusDownloading, 0, 0, 0)
+	notifyLabeled("video", "", StatusDownloading, 0, 0, 0)
 
 	client := xhs.NewClient(dm.config, task.OutputDir)
 	// 直接下载到 task.OutputDir，避免再嵌套作者/笔记目录
@@ -121,12 +124,44 @@ func (dm *DownloadManager) executeXHSTask(task *DownloadTask) {
 	parser := client.Parser()
 	note, err := parser.Parse(task.Context, task.URL)
 	if err != nil {
-		dm.failXHSTask(task, fmt.Errorf("解析笔记失败: %w", err), notifyStatus)
+		dm.failXHSTask(task, fmt.Errorf("解析笔记失败: %w", err), notifyLabeled)
 		return
 	}
 	if len(note.MediaItems) == 0 {
-		dm.failXHSTask(task, fmt.Errorf("笔记未发现可下载媒体"), notifyStatus)
+		dm.failXHSTask(task, fmt.Errorf("笔记未发现可下载媒体"), notifyLabeled)
 		return
+	}
+
+	imageCount := 0
+	videoCount := 0
+	for _, m := range note.MediaItems {
+		switch m.Type {
+		case xhs.MediaTypeImage, xhs.MediaTypeLivePhoto:
+			imageCount++
+		case xhs.MediaTypeVideo:
+			videoCount++
+		}
+	}
+	isVideoNote := videoCount > 0 && imageCount == 0
+
+	// 解析后立即用真实媒体类型重建 file_details
+	if dm.db != nil && task.RecordID > 0 {
+		var initFiles []models.FileDetail
+		if isVideoNote {
+			initFiles = append(initFiles, models.FileDetail{Name: "video", Label: "视频", Status: "downloading"})
+		} else {
+			label := "图片"
+			if imageCount > 0 {
+				label = fmt.Sprintf("图片 (0/%d)", imageCount)
+			}
+			initFiles = append(initFiles, models.FileDetail{Name: "images", Label: label, Status: "downloading"})
+			if videoCount > 0 {
+				initFiles = append(initFiles, models.FileDetail{Name: "video", Label: "视频", Status: "downloading"})
+			}
+		}
+		detailsJSON, _ := json.Marshal(models.FileDetailsData{Files: initFiles})
+		dm.db.Model(&models.DownloadRecord{}).Where("id = ?", task.RecordID).
+			Update("file_details", detailsJSON)
 	}
 
 	// 同步视频元信息到数据库
@@ -152,27 +187,79 @@ func (dm *DownloadManager) executeXHSTask(task *DownloadTask) {
 		}
 	}
 
-	totalFiles := len(note.MediaItems)
-	completed := 0
-	progressCb := func(filename string, downloaded, total int64) {
-		var pct float64
-		if totalFiles > 0 {
-			pct = float64(completed) / float64(totalFiles) * 100
-			if total > 0 {
-				pct += float64(downloaded) / float64(total) / float64(totalFiles) * 100
-			}
+	var (
+		videoMu        sync.Mutex
+		videoTotals    = make(map[string]int64)
+		videoDoneBytes = make(map[string]int64)
+
+		imgMu       sync.Mutex
+		imgFinished = make(map[string]bool)
+	)
+
+	// 提取图片"组键"以去重 LivePhoto 的图+视频两个文件（同一 group 算一张）
+	imgGroupKey := func(filename string) string {
+		if idx := strings.Index(filename, "_live_src."); idx >= 0 {
+			return filename[:idx]
 		}
-		notifyStatus("video", StatusDownloading, pct, downloaded, total)
+		if dot := strings.LastIndex(filename, "."); dot >= 0 {
+			return filename[:dot]
+		}
+		return filename
+	}
+
+	progressCb := func(filename string, downloaded, total int64) {
+		lower := strings.ToLower(filename)
+		isLiveSrc := strings.Contains(lower, "_live_src.")
+		isMP4 := strings.HasSuffix(lower, ".mp4")
+
+		if isVideoNote && isMP4 && !isLiveSrc {
+			videoMu.Lock()
+			videoTotals[filename] = total
+			videoDoneBytes[filename] = downloaded
+			var totalAll, downAll int64
+			for _, t := range videoTotals {
+				totalAll += t
+			}
+			for _, d := range videoDoneBytes {
+				downAll += d
+			}
+			videoMu.Unlock()
+			var pct float64
+			if totalAll > 0 {
+				pct = float64(downAll) / float64(totalAll) * 100
+			}
+			notifyLabeled("video", "视频", StatusDownloading, pct, downAll, totalAll)
+			return
+		}
+
+		// 图集/Live：按文件完成数计
+		if imageCount <= 0 || total <= 0 || downloaded < total {
+			return
+		}
+		key := imgGroupKey(filename)
+		imgMu.Lock()
+		isNew := !imgFinished[key]
+		if isNew {
+			imgFinished[key] = true
+		}
+		done := len(imgFinished)
+		imgMu.Unlock()
+		if !isNew {
+			return
+		}
+		pct := float64(done) / float64(imageCount) * 100
+		label := fmt.Sprintf("图片 (%d/%d)", done, imageCount)
+		notifyLabeled("images", label, StatusDownloading, pct, int64(done), int64(imageCount))
 	}
 
 	result, err := dl.DownloadNote(task.Context, note, task.OutputDir, progressCb)
 	if err != nil {
-		dm.failXHSTask(task, err, notifyStatus)
+		dm.failXHSTask(task, err, notifyLabeled)
 		return
 	}
 
 	if result.SuccessNum == 0 {
-		dm.failXHSTask(task, fmt.Errorf("所有媒体下载失败"), notifyStatus)
+		dm.failXHSTask(task, fmt.Errorf("所有媒体下载失败"), notifyLabeled)
 		return
 	}
 
@@ -218,7 +305,14 @@ func (dm *DownloadManager) executeXHSTask(task *DownloadTask) {
 	for _, f := range result.Files {
 		totalSize += f.Size
 	}
-	notifyStatus("video", StatusSucceeded, 100, totalSize, totalSize)
+	if isVideoNote {
+		notifyLabeled("video", "视频", StatusSucceeded, 100, totalSize, totalSize)
+	} else {
+		notifyLabeled("images", fmt.Sprintf("图片 (%d/%d)", imageCount, imageCount), StatusSucceeded, 100, int64(imageCount), int64(imageCount))
+		if videoCount > 0 {
+			notifyLabeled("video", "视频", StatusSucceeded, 100, totalSize, totalSize)
+		}
+	}
 
 	task.SetStatus(TaskStatusCompleted)
 	dm.emitEvent(ManagerEvent{
@@ -240,11 +334,11 @@ func (dm *DownloadManager) executeXHSTask(task *DownloadTask) {
 	utils.Info("小红书笔记下载完成: [%s], 成功 %d, 失败 %d", video.Name, result.SuccessNum, result.FailedNum)
 }
 
-func (dm *DownloadManager) failXHSTask(task *DownloadTask, err error, notify func(string, DownloadStatus, float64, int64, int64)) {
+func (dm *DownloadManager) failXHSTask(task *DownloadTask, err error, notify func(string, string, DownloadStatus, float64, int64, int64)) {
 	utils.Error("小红书下载失败: %v", err)
 	task.SetError(err)
 	task.SetStatus(TaskStatusFailed)
-	notify("video", StatusFailed, 0, 0, 0)
+	notify("video", "", StatusFailed, 0, 0, 0)
 
 	if dm.db != nil && task.RecordID > 0 {
 		now := time.Now()
@@ -258,11 +352,10 @@ func (dm *DownloadManager) failXHSTask(task *DownloadTask, err error, notify fun
 	dm.handleTaskFailure(task)
 }
 
-func (dm *DownloadManager) buildXHSFileDetails() []map[string]interface{} {
-	return []map[string]interface{}{
-		{
-			"name":   "video",
-			"status": "pending",
+func (dm *DownloadManager) buildXHSFileDetails() models.FileDetailsData {
+	return models.FileDetailsData{
+		Files: []models.FileDetail{
+			{Name: "video", Label: "视频", Status: "pending"},
 		},
 	}
 }

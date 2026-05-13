@@ -1579,6 +1579,9 @@ func (dm *DownloadManager) updateDownloadRecordProgress(videoID uint, taskName s
 			details.Files[i].Status = string(progress.Status)
 			details.Files[i].Progress = progress.Progress
 			details.Files[i].Size = progress.DownloadedSize
+			if progress.Label != "" {
+				details.Files[i].Label = progress.Label
+			}
 			updated = true
 			break
 		}
