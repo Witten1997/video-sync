@@ -108,6 +108,16 @@ const formatDuration = (seconds: number): string => {
 
 // 构建视频URL
 const buildVideoUrl = (video: Video, page?: Page): string => {
+  // 优先使用 Page 已写入的 file_path（小红书等命名规则与B站不同的来源）
+  // 视频笔记的 pages[0] 可能是封面图，需找 kind=video 的页
+  const effectivePage = page
+    || video.pages?.find(p => p.kind === 'video' && p.file_path)
+    || video.pages?.[0]
+  if (effectivePage?.file_path) {
+    const fp = effectivePage.file_path
+    return /^(https?:)?\//.test(fp) ? fp : `/downloads/${fp}`
+  }
+
   if (!video.path) {
     throw new Error('视频路径不存在')
   }

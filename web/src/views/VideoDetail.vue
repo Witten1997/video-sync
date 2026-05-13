@@ -33,16 +33,17 @@
               </el-button>
             </div>
             <el-descriptions :column="2" border class="info-desc">
-              <el-descriptions-item :label="isGallery ? '笔记ID' : 'BV号'">{{ video.bvid }}</el-descriptions-item>
-              <el-descriptions-item :label="isGallery ? '作者' : 'UP主'">{{ video.upper_name }}</el-descriptions-item>
+              <el-descriptions-item :label="isXHS ? '笔记ID' : 'BV号'">{{ video.bvid }}</el-descriptions-item>
+              <el-descriptions-item :label="isXHS ? '作者' : 'UP主'">{{ video.upper_name }}</el-descriptions-item>
               <el-descriptions-item label="发布时间">
                 {{ formatTime(video.pubtime) }}
               </el-descriptions-item>
               <el-descriptions-item label="收藏时间">
                 {{ formatTime(video.favtime) }}
               </el-descriptions-item>
-              <el-descriptions-item :label="isGallery ? '媒体数量' : '分P数量'">
+              <el-descriptions-item :label="isXHS ? '媒体数量' : '分P数量'">
                 <el-tag v-if="isGallery" type="warning" size="small">图文 · {{ pages.length }} 项</el-tag>
+                <el-tag v-else-if="isXHS" type="success" size="small">视频笔记</el-tag>
                 <span v-else>{{ video.single_page ? '单P' : `多P (${pages.length})` }}</span>
               </el-descriptions-item>
               <el-descriptions-item label="状态">
@@ -194,6 +195,8 @@ const pages = ref<Page[]>([])
 
 // 是否为图集类型（小红书图文）
 const isGallery = computed(() => video.value?.media_kind === 'gallery')
+// 是否为小红书来源（含图文笔记和视频笔记）
+const isXHS = computed(() => !!video.value?.bvid?.startsWith('XHS_'))
 
 // 播放器相关
 const playerVisible = ref(false)

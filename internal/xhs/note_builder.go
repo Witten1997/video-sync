@@ -50,10 +50,18 @@ func buildNoteFromJSON(node map[string]json.RawMessage) (*Note, error) {
 	hasVideo := extractVideoMedia(node, note)
 	hasImages := extractImageMedia(node, note)
 
-	if hasVideo && !hasImages {
+	// 优先取原始 type 字段；缺失时回退到媒体推断
+	switch strings.ToLower(strRaw(node, "type")) {
+	case "video":
 		note.Type = NoteTypeVideo
-	} else {
+	case "normal":
 		note.Type = NoteTypeNormal
+	default:
+		if hasVideo && !hasImages {
+			note.Type = NoteTypeVideo
+		} else {
+			note.Type = NoteTypeNormal
+		}
 	}
 
 	if !hasVideo && !hasImages {
@@ -74,7 +82,55 @@ func extractVideoMedia(node map[string]json.RawMessage, note *Note) bool {
 		return false
 	}
 
-	// 优先：consumer.originVideoKey → 拼接 sns-video-bd.xhscdn.com
+	// 优先：media.stream 中按 height 选最高画质，h264 优先（浏览器兼容性更好）
+	if rawMedia, ok := video["media"]; ok {
+		var media map[string]json.RawMessage
+		if json.Unmarshal(rawMedia, &media) == nil {
+			if rawStream, ok := media["stream"]; ok {
+				var stream map[string]json.RawMessage
+				if json.Unmarshal(rawStream, &stream) == nil {
+					var bestURL string
+					var bestW, bestH int
+					for _, codec := range []string{"h264", "h265"} {
+						rawArr, ok := stream[codec]
+						if !ok {
+							continue
+						}
+						var arr []map[string]json.RawMessage
+						if json.Unmarshal(rawArr, &arr) != nil {
+							continue
+						}
+						for _, s := range arr {
+							u := firstStr(s, "masterUrl", "url", "backupUrls")
+							if u == "" {
+								continue
+							}
+							h := intRaw(s, "height")
+							if h > bestH {
+								bestH = h
+								bestW = intRaw(s, "width")
+								bestURL = u
+							}
+						}
+						if bestURL != "" {
+							break
+						}
+					}
+					if bestURL != "" {
+						note.MediaItems = append(note.MediaItems, MediaItem{
+							Type:     MediaTypeVideo,
+							VideoURL: bestURL,
+							Width:    bestW,
+							Height:   bestH,
+						})
+						return true
+					}
+				}
+			}
+		}
+	}
+
+	// 兜底：consumer.originVideoKey 拼接 sns-video-bd.xhscdn.com（通常为转码降清版）
 	if rawConsumer, ok := video["consumer"]; ok {
 		var consumer map[string]json.RawMessage
 		if json.Unmarshal(rawConsumer, &consumer) == nil {
@@ -88,33 +144,6 @@ func extractVideoMedia(node map[string]json.RawMessage, note *Note) bool {
 		}
 	}
 
-	// 备选：media.stream.h265[0].masterUrl 或 h264[0].masterUrl
-	if rawMedia, ok := video["media"]; ok {
-		var media map[string]json.RawMessage
-		if json.Unmarshal(rawMedia, &media) == nil {
-			if rawStream, ok := media["stream"]; ok {
-				var stream map[string]json.RawMessage
-				if json.Unmarshal(rawStream, &stream) == nil {
-					for _, codec := range []string{"h265", "h264"} {
-						if rawArr, ok := stream[codec]; ok {
-							var arr []map[string]json.RawMessage
-							if json.Unmarshal(rawArr, &arr) == nil && len(arr) > 0 {
-								if u := firstStr(arr[0], "masterUrl", "url"); u != "" {
-									note.MediaItems = append(note.MediaItems, MediaItem{
-										Type:     MediaTypeVideo,
-										VideoURL: u,
-										Width:    intRaw(arr[0], "width"),
-										Height:   intRaw(arr[0], "height"),
-									})
-									return true
-								}
-							}
-						}
-					}
-				}
-			}
-		}
-	}
 	return false
 }
 

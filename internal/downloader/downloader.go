@@ -322,7 +322,7 @@ func (d *Downloader) downloadPageVideo(ctx context.Context, video *models.Video,
 			page.Width = probe.Width
 			page.Height = probe.Height
 			page.FrameRate = probe.FrameRate
-			page.Quality = models.CalcQuality(probe.Height, probe.FrameRate)
+			page.Quality = models.CalcQuality(probe.Width, probe.Height, probe.FrameRate)
 			page.Orientation = models.CalcOrientation(probe.Width, probe.Height)
 			utils.Info("探测画质: %s P%d -> %dx%d@%.2ffps [%s]",
 				video.Name, page.PID, probe.Width, probe.Height, probe.FrameRate,

@@ -42,22 +42,27 @@ func QualityLabel(code int8) string {
 	}
 }
 
-// CalcQuality 根据高度和帧率计算画质编码
-func CalcQuality(height int, fps float32) int8 {
+// CalcQuality 根据宽高和帧率计算画质编码
+// 用短边作为画质标准，避免竖屏视频按高度被高估（如 720x1280 应为 720P 而非 1080P）
+func CalcQuality(width, height int, fps float32) int8 {
+	short := height
+	if width > 0 && width < short {
+		short = width
+	}
 	switch {
-	case height >= 4320:
+	case short >= 4320:
 		return Quality8K
-	case height >= 2160:
+	case short >= 2160:
 		return Quality4K
-	case height >= 1080 && fps >= 50:
+	case short >= 1080 && fps >= 50:
 		return Quality1080P60
-	case height >= 1080:
+	case short >= 1080:
 		return Quality1080P
-	case height >= 720:
+	case short >= 720:
 		return Quality720P
-	case height >= 480:
+	case short >= 480:
 		return Quality480P
-	case height > 0:
+	case short > 0:
 		return Quality360P
 	default:
 		return QualityUnknown

@@ -419,6 +419,14 @@ func (s *URLDownloadService) submitXHS(ctx context.Context, req URLDownloadReque
 		pubTime = time.Unix(note.PublishTime/1000, 0)
 	}
 
+	isVideoNote := note.Type == xhs.NoteTypeVideo
+	mediaKind := "gallery"
+	singlePage := len(note.MediaItems) == 1
+	if isVideoNote {
+		mediaKind = "video"
+		singlePage = true
+	}
+
 	video := models.Video{
 		BVid:           bvid,
 		Name:           title,
@@ -427,11 +435,11 @@ func (s *URLDownloadService) submitXHS(ctx context.Context, req URLDownloadReque
 		PubTime:        pubTime,
 		FavTime:        time.Now(),
 		CTime:          pubTime,
-		SinglePage:     len(note.MediaItems) == 1,
+		SinglePage:     singlePage,
 		Valid:          true,
 		ShouldDownload: true,
 		Tags:           note.Tags,
-		MediaKind:      "gallery",
+		MediaKind:      mediaKind,
 	}
 	if cover := firstImageURL(note); cover != "" {
 		video.Cover = cover

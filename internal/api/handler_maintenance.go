@@ -120,7 +120,7 @@ func (s *Server) backfillPageMetadata(rows []pageWithVideo, taskName string) {
 			"width":       probe.Width,
 			"height":      probe.Height,
 			"frame_rate":  probe.FrameRate,
-			"quality":     models.CalcQuality(probe.Height, probe.FrameRate),
+			"quality":     models.CalcQuality(probe.Width, probe.Height, probe.FrameRate),
 			"orientation": models.CalcOrientation(probe.Width, probe.Height),
 		}
 		if err := s.db.Model(&models.Page{}).Where("id = ?", r.Page.ID).Updates(updates).Error; err != nil {
@@ -361,7 +361,7 @@ func (s *Server) doBackfillQuality() {
 			"width":       probe.Width,
 			"height":      probe.Height,
 			"frame_rate":  probe.FrameRate,
-			"quality":     models.CalcQuality(probe.Height, probe.FrameRate),
+			"quality":     models.CalcQuality(probe.Width, probe.Height, probe.FrameRate),
 			"orientation": models.CalcOrientation(probe.Width, probe.Height),
 		}
 		if err := s.db.Model(&models.Page{}).Where("id = ?", r.Page.ID).Updates(updates).Error; err != nil {

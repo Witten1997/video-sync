@@ -472,8 +472,8 @@ const handlePlay = async (row: Video) => {
   }
 
   try {
-    // 如果是多P视频，需要加载分P列表
-    if (!row.single_page) {
+    // 多P视频或来源命名不一致（如小红书）的单P视频，加载分P以拿到 file_path
+    if (!row.single_page || row.bvid?.startsWith('XHS_')) {
       const pages = await getVideoPages(row.id)
       row.pages = pages
     }

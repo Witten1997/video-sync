@@ -142,7 +142,7 @@ func (dm *DownloadManager) executeXHSTask(task *DownloadTask) {
 			videoCount++
 		}
 	}
-	isVideoNote := videoCount > 0 && imageCount == 0
+	isVideoNote := note.Type == xhs.NoteTypeVideo
 
 	// 解析后立即用真实媒体类型重建 file_details
 	if dm.db != nil && task.RecordID > 0 {
@@ -286,17 +286,33 @@ func (dm *DownloadManager) executeXHSTask(task *DownloadTask) {
 					"download_status": 1,
 					"kind":            string(f.MediaType),
 				}
+				if f.MediaType == xhs.MediaTypeVideo {
+					if probe, err := ProbeVideo(task.Context, f.Path); err != nil {
+						utils.Warn("小红书视频 ffprobe 探测失败: %s, %v", f.Path, err)
+					} else {
+						updates["width"] = probe.Width
+						updates["height"] = probe.Height
+						updates["frame_rate"] = probe.FrameRate
+						updates["quality"] = models.CalcQuality(probe.Width, probe.Height, probe.FrameRate)
+						updates["orientation"] = models.CalcOrientation(probe.Width, probe.Height)
+					}
+				}
 				dm.db.Model(p).Updates(updates)
-				if f.GroupIndex == 1 && firstCoverPath == "" {
+				// cover 优先选图片类型（避免视频笔记把 mp4 当封面）
+				if firstCoverPath == "" && f.MediaType == xhs.MediaTypeImage {
 					firstCoverPath = f.Path
 				}
+			}
+			// 兜底：没有图片则取第一个文件
+			if firstCoverPath == "" && len(result.Files) > 0 {
+				firstCoverPath = result.Files[0].Path
 			}
 		}
 		videoUpdates := map[string]interface{}{
 			"download_status": 1,
 		}
-		if firstCoverPath != "" {
-			videoUpdates["cover"] = firstCoverPath
+		if coverURL := dm.localPathToDownloadURL(firstCoverPath); coverURL != "" {
+			videoUpdates["cover"] = coverURL
 		}
 		dm.db.Model(video).Updates(videoUpdates)
 	}
@@ -358,4 +374,33 @@ func (dm *DownloadManager) buildXHSFileDetails() models.FileDetailsData {
 			{Name: "video", Label: "视频", Status: "pending"},
 		},
 	}
+}
+
+// localPathToDownloadURL 将下载文件的绝对路径转换为可由前端访问的 /downloads/... URL。
+// 文件不在 DownloadBase 下时返回空串。
+func (dm *DownloadManager) localPathToDownloadURL(absPath string) string {
+	if absPath == "" || dm.config == nil {
+		return ""
+	}
+	base := dm.config.Paths.DownloadBase
+	if base == "" {
+		return ""
+	}
+	absBase, err := filepath.Abs(base)
+	if err != nil {
+		return ""
+	}
+	absFile, err := filepath.Abs(absPath)
+	if err != nil {
+		return ""
+	}
+	rel, err := filepath.Rel(absBase, absFile)
+	if err != nil {
+		return ""
+	}
+	rel = filepath.ToSlash(rel)
+	if strings.HasPrefix(rel, "../") || rel == ".." {
+		return ""
+	}
+	return "/downloads/" + rel
 }
