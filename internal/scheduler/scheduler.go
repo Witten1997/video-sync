@@ -50,14 +50,20 @@ type SchedulerStatus struct {
 type EventType string
 
 const (
-	EventSchedulerStarted EventType = "scheduler_started"
-	EventSchedulerStopped EventType = "scheduler_stopped"
-	EventSyncStarted      EventType = "sync_started"
-	EventSyncCompleted    EventType = "sync_completed"
-	EventSyncFailed       EventType = "sync_failed"
-	EventSourceScanned    EventType = "source_scanned"
-	EventError            EventType = "error"
+	EventSchedulerStarted  EventType = "scheduler_started"
+	EventSchedulerStopped  EventType = "scheduler_stopped"
+	EventSyncStarted       EventType = "sync_started"
+	EventSyncCompleted     EventType = "sync_completed"
+	EventSyncFailed        EventType = "sync_failed"
+	EventSourceScanned     EventType = "source_scanned"
+	EventCredentialInvalid EventType = "credential_invalid"
+	EventError             EventType = "error"
 )
+
+// EmitEvent 对外暴露事件发送，供同包内 SyncTask 调用
+func (s *Scheduler) EmitEvent(event Event) {
+	s.emitEvent(event)
+}
 
 // Event 调度器事件
 type Event struct {
@@ -321,7 +327,7 @@ func (s *Scheduler) TriggerManual() (string, error) {
 
 	// 创建同步任务
 	utils.Debug("[TriggerManual] 创建同步任务...")
-	syncTask := NewSyncTask(context.Background(), "manual", s.db, s.config, s.downloadManager)
+	syncTask := NewSyncTask(context.Background(), "manual", s.db, s.config, s.downloadManager).withScheduler(s)
 	syncID := syncTask.ID
 	utils.Debug("[TriggerManual] 同步任务已创建: %s", syncID)
 
@@ -502,7 +508,7 @@ func (s *Scheduler) executeSync(ctx context.Context, triggerType string) (string
 
 	// 创建同步任务
 	utils.Debug("[executeSync] 创建同步任务...")
-	syncTask := NewSyncTask(ctx, triggerType, s.db, s.config, s.downloadManager)
+	syncTask := NewSyncTask(ctx, triggerType, s.db, s.config, s.downloadManager).withScheduler(s)
 	utils.Debug("[executeSync] 同步任务已创建: %s", syncTask.ID)
 
 	// 设置当前同步ID

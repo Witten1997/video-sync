@@ -8,6 +8,8 @@ import (
 
 	"bili-download/internal/utils"
 	"bili-download/internal/version"
+
+	"github.com/gin-gonic/gin"
 )
 
 // CheckVersionInfo 版本检查结果
@@ -90,6 +92,21 @@ func (s *Server) doVersionCheck() {
 
 	if info.HasUpdate {
 		utils.Info("发现新版本: %s -> %s", version.Version, latestVer)
+		s.pushAlert(SystemAlert{
+			Key:      "version_update",
+			Type:     "version_update",
+			Title:    "发现新版本",
+			Message:  fmt.Sprintf("检测到新版本 %s，点击前往在线升级。", latestVer),
+			Severity: "info",
+			Action:   "/config?tab=version",
+			Data: gin.H{
+				"current_version": version.Version,
+				"new_version":     latestVer,
+				"published_at":    info.PublishedAt,
+			},
+		})
+	} else {
+		s.clearAlert("version_update")
 	}
 }
 

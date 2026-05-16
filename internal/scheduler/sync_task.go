@@ -40,12 +40,16 @@ type SyncTask struct {
 	SourceScans []*models.VideoSourceScan
 	Errors      []TaskError
 
+	// 凭据失效检测（同一次同步任务内只触发一次告警事件）
+	credentialInvalidNotified bool
+
 	// 依赖
 	ctx             context.Context
 	db              *gorm.DB
 	config          *config.Config
 	downloadManager *downloader.DownloadManager
 	biliClient      *bilibili.Client
+	scheduler       *Scheduler
 }
 
 // TaskError 任务错误
@@ -85,6 +89,46 @@ func NewSyncTask(ctx context.Context, triggerType string, db *gorm.DB, cfg *conf
 	}
 }
 
+// withScheduler 注入 Scheduler 引用，用于事件发送
+func (st *SyncTask) withScheduler(s *Scheduler) *SyncTask {
+	st.scheduler = s
+	return st
+}
+
+// isBiliSource 判断是否为 B 站类型视频源
+func isBiliSource(sourceType string) bool {
+	switch sourceType {
+	case "favorite", "submission", "collection", "watch_later":
+		return true
+	}
+	return false
+}
+
+// notifyCredentialInvalidOnce 同一次同步任务只发一次凭据失效事件
+func (st *SyncTask) notifyCredentialInvalidOnce(source VideoSourceInfo, scanErr error) {
+	if st.credentialInvalidNotified || st.scheduler == nil {
+		return
+	}
+	// 二次确认：调用 ValidateCredential 直接判定凭据状态
+	if err := st.biliClient.ValidateCredential(); err == nil {
+		return
+	}
+	st.credentialInvalidNotified = true
+	utils.Warn("[%s] 检测到 B 站凭据失效，视频源 %s 扫描失败: %v", st.ID, source.Name, scanErr)
+	st.scheduler.EmitEvent(Event{
+		Type: EventCredentialInvalid,
+		Data: map[string]interface{}{
+			"platform":    "bilibili",
+			"source_id":   source.ID,
+			"source_name": source.Name,
+			"source_type": source.Type,
+			"error":       scanErr.Error(),
+			"sync_id":     st.ID,
+		},
+		Timestamp: time.Now(),
+	})
+}
+
 // Execute 执行同步任务
 func (st *SyncTask) Execute() error {
 	utils.Info("[%s] 开始执行同步任务", st.ID)
@@ -120,6 +164,10 @@ func (st *SyncTask) Execute() error {
 				})
 				// 更新视频源健康状态
 				st.updateSourceHealth(source.ID, source.Type, false, err.Error())
+				// 若是 B 站源失败，尝试判定是否为凭据失效，命中则上报一次告警事件
+				if isBiliSource(source.Type) {
+					st.notifyCredentialInvalidOnce(source, err)
+				}
 			} else {
 				st.SourcesScanned++
 				st.SourceScans = append(st.SourceScans, scanResult)

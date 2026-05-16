@@ -86,10 +86,12 @@
 </template>
 
 <script setup lang="ts">
-import { computed, watch } from 'vue'
+import { computed, watch, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { ElNotification } from 'element-plus'
 import { useTabsStore } from '@/stores/tabs'
 import { useAuthStore } from '@/stores/auth'
+import { getSystemAlerts, type SystemAlert } from '@/api/system'
 import TabsBar from '@/components/TabsBar.vue'
 
 const route = useRoute()
@@ -127,6 +129,99 @@ const currentTitle = computed(() => {
 const handleRefresh = () => {
   router.go(0)
 }
+
+// ===== 系统告警通知 =====
+const shownAlertKeys = new Set<string>()
+let alertsWs: WebSocket | null = null
+
+const severityToType = (sev: string): 'success' | 'warning' | 'info' | 'error' => {
+  switch (sev) {
+    case 'error':
+      return 'error'
+    case 'warning':
+      return 'warning'
+    case 'success':
+      return 'success'
+    default:
+      return 'info'
+  }
+}
+
+const showAlertNotification = (alert: SystemAlert) => {
+  if (!alert?.key || shownAlertKeys.has(alert.key)) {
+    return
+  }
+  shownAlertKeys.add(alert.key)
+  const notif = ElNotification({
+    title: alert.title || '系统提示',
+    message: alert.message || '',
+    type: severityToType(alert.severity),
+    position: 'bottom-right',
+    duration: 0,
+    showClose: true,
+    onClick: () => {
+      if (alert.action) {
+        const [path, query] = alert.action.split('?')
+        const queryObj: Record<string, string> = {}
+        if (query) {
+          query.split('&').forEach(kv => {
+            const [k, v] = kv.split('=')
+            if (k) queryObj[k] = decodeURIComponent(v || '')
+          })
+        }
+        router.push({ path, query: queryObj })
+      }
+      notif.close()
+    }
+  })
+}
+
+const refreshAlerts = async () => {
+  try {
+    const res = await getSystemAlerts()
+    res.items?.forEach(showAlertNotification)
+  } catch (e) {
+    // 静默失败，不打扰用户
+  }
+}
+
+const connectAlertsWs = () => {
+  if (!authStore.token) return
+  try {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+    const host = window.location.host
+    alertsWs = new WebSocket(`${protocol}//${host}/api/ws?token=${authStore.token}`)
+    alertsWs.onmessage = (event) => {
+      try {
+        const msg = JSON.parse(event.data)
+        if (msg.type === 'system_alert' && msg.data) {
+          showAlertNotification(msg.data as SystemAlert)
+        } else if (msg.type === 'system_alert_cleared' && msg.data?.key) {
+          shownAlertKeys.delete(msg.data.key)
+        }
+      } catch {
+        // ignore
+      }
+    }
+    alertsWs.onclose = () => {
+      alertsWs = null
+    }
+  } catch {
+    // ignore
+  }
+}
+
+onMounted(() => {
+  refreshAlerts()
+  connectAlertsWs()
+})
+
+onUnmounted(() => {
+  if (alertsWs) {
+    alertsWs.close()
+    alertsWs = null
+  }
+})
 </script>
 
 <style scoped>

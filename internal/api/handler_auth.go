@@ -133,5 +133,8 @@ func (s *Server) saveCredentialToConfig(credential *bilibili.Credential) error {
 		s.scheduler.UpdateConfig(newConfig)
 	}
 
+	// 重新登录成功后清除凭据失效告警
+	s.clearAlert("bili_credential_invalid")
+
 	return nil
 }

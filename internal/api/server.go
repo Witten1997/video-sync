@@ -50,6 +50,7 @@ type Server struct {
 	frontendFS                   fs.FS
 	checkVersion                 CheckVersionInfo
 	checkVersionMu               sync.RWMutex
+	alerts                       *alertsStore
 	UpgradeSignal                chan string
 }
 
@@ -80,6 +81,7 @@ func NewServer(cfg *config.Config, configPath string, db *gorm.DB, biliClient *b
 		websocketHub:     NewWebSocketHub(),
 		frontendFS:       frontendFS,
 		UpgradeSignal:    make(chan string, 1),
+		alerts:           newAlertsStore(),
 		imageProxyClient: utils.NewHTTPClient(cfg.Proxy, 10*time.Second, 20, 10),
 	}
 
@@ -147,6 +149,7 @@ func (s *Server) setupRouter() {
 		// 系统信息
 		api.GET("/system/info", s.handleSystemInfo)
 		api.GET("/system/stats", s.handleSystemStats)
+		api.GET("/system/alerts", s.handleListSystemAlerts)
 
 		// 认证（二维码登录）
 		auth := api.Group("/auth")
@@ -404,6 +407,11 @@ func (s *Server) Start() error {
 
 	// 监听调度器事件，推送到 WebSocket
 	s.scheduler.OnEvent(func(event scheduler.Event) {
+		// 凭据失效事件：推送告警 + Telegram 通知
+		if event.Type == scheduler.EventCredentialInvalid {
+			s.handleCredentialInvalidEvent(event)
+			return
+		}
 		s.websocketHub.Broadcast(WebSocketMessage{
 			Type:      string(event.Type),
 			Data:      event.Data,

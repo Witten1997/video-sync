@@ -477,7 +477,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, onMounted, onUnmounted, nextTick, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Refresh, Upload, Clock, SuccessFilled, CircleCheckFilled, CircleCloseFilled } from '@element-plus/icons-vue'
 import { getConfig, updateConfig, validateBilibiliCredential, generateQRCode, pollQRCodeStatus } from '@/api/config'
@@ -508,6 +509,22 @@ const predefineColors = ref([
 
 const loading = ref(false)
 const activeTab = ref('basic')
+const route = useRoute()
+const router = useRouter()
+const validTabs = ['basic', 'bilibili', 'video', 'danmaku', 'advanced', 'tools', 'version']
+const applyTabFromQuery = () => {
+  const t = route.query?.tab
+  if (typeof t === 'string' && validTabs.includes(t)) {
+    activeTab.value = t
+  }
+}
+applyTabFromQuery()
+watch(() => route.query?.tab, applyTabFromQuery)
+watch(activeTab, (val) => {
+  if (route.query?.tab !== val) {
+    router.replace({ path: route.path, query: { ...route.query, tab: val } })
+  }
+})
 
 // yt-dlp 版本管理
 const ytdlpVersion = ref({

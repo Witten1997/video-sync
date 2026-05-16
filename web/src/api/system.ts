@@ -46,3 +46,19 @@ export interface SystemStats {
 export const getSystemStats = () => {
   return http.get<SystemStats>('/system/stats')
 }
+
+// 系统告警
+export interface SystemAlert {
+  key: string
+  type: string
+  title: string
+  message: string
+  severity: string
+  action: string
+  created_at: string
+  data?: any
+}
+
+export const getSystemAlerts = () => {
+  return http.get<{ items: SystemAlert[] }>('/system/alerts')
+}
